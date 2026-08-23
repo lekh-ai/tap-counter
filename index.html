@@ -1952,13 +1952,21 @@
     return h - Math.floor(h);
   }
   function makeNuggetGeometry(size) {
-    const geo = new THREE.IcosahedronGeometry(size, 1);
+    // subdivision 3 gives ~1280 faces instead of 80 — enough for real facet detail
+    // instead of the flat, low-poly "isometric" look a single subdivision produces
+    const geo = new THREE.IcosahedronGeometry(size, 3);
     const pos = geo.attributes.position;
     const v = new THREE.Vector3();
+    const fineDir = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
       const n = v.clone().normalize();
-      const bump = 0.82 + hashDir(n) * 0.32; // deterministic per-direction displacement
+      // two octaves: a coarse overall lump shape plus finer per-facet bumps,
+      // so the surface reads as a real nugget rather than a smooth rounded blob
+      const coarse = hashDir(n);
+      fineDir.copy(n).multiplyScalar(9);
+      const fine = hashDir(fineDir);
+      const bump = 0.88 + coarse * 0.2 + (fine - 0.5) * 0.09;
       v.copy(n.multiplyScalar(size * bump));
       pos.setXYZ(i, v.x, v.y * 0.82, v.z); // slight overall squash so it rests naturally
     }
