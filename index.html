@@ -594,7 +594,7 @@
       growthSpeed: rand(0.8, 1.4),
       baseWidth: depth === 1 ? rand(1.1, 1.9) : rand(0.5, 0.9),
       alpha: depth === 1 ? rand(0.55, 0.8) : rand(0.35, 0.55),
-      hasLeaf: depth === 1 && Math.random() < 0.7,
+      hasLeaf: Math.random() < 0.92,
       children: [],
     };
     if (depth === 1 && Math.random() < 0.8) {
@@ -810,6 +810,15 @@
             child.alpha, time, (u, tm) => childWaveAt(trunk, branch, child, u, tm),
             (t, a) => rootColorAt(child.pts[0].x + t * 0.1, a * (1 - t))
           );
+          if (child.hasLeaf && cReveal > 0.55) {
+            const last = child.pts[child.pts.length - 1];
+            const prevPt = child.pts[child.pts.length - 2];
+            const angle = Math.atan2((last.y - prevPt.y) * H, (last.x - prevPt.x) * W);
+            const tipPt = pointAt(child.pts, cReveal, (u, tm) => childWaveAt(trunk, branch, child, u, tm), time);
+            const leafSize = (1.6 + child.baseWidth) * widthScale;
+            const leafAlpha = Math.min(1, (cReveal - 0.55) / 0.3) * child.alpha;
+            drawLeaf(tipPt, angle, leafSize, rootColorAt(child.pts[0].x + 0.05, 1), leafAlpha);
+          }
         });
       });
     });
