@@ -920,27 +920,45 @@
   }
 
   // ---- Scene: river flowing from the temple doors, golden pebbles, embers ----
+  // The river always spans the full width — taps intensify its glow, current speed,
+  // and pebble count/brightness rather than its length.
   const RIVER_Y0 = 0.54;
+  const RIVER_FULL_X = 0.97;
   function riverCenterY(x, time) {
     return RIVER_Y0
       + Math.sin(x * 3.1 + 0.6) * 0.055
       + Math.sin(x * 1.15 - 0.3) * 0.035
       + (reducedMotion ? 0 : Math.sin(time * 0.00014 + x * 4.2) * 0.012);
   }
-  function riverHalfWidth(x, growth) {
-    return (0.032 + x * 0.05) * (0.55 + 0.55 * growth);
+  function riverHalfWidth(x) {
+    return 0.085 + x * 0.045 + Math.sin(x * 2.4) * 0.012;
   }
 
-  // golden pebbles resting in the riverbed, denser near the temple (spiritual origin)
-  // and revealing progressively further out as the river grows
-  const RV_PEBBLE_BASE = 20;
-  const RV_PEBBLE_MAX_EXTRA = 26;
+  // stones resting in the riverbed: irregular rounded polygons of varying size,
+  // denser near the temple (spiritual origin) and revealing further out with taps
+  function makeStoneShape(size) {
+    const sides = 6 + Math.floor(rand(0, 3));
+    const pts = [];
+    for (let i = 0; i < sides; i++) {
+      const a = (i / sides) * Math.PI * 2;
+      const r = size * rand(0.75, 1.05);
+      pts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r * 0.72 });
+    }
+    return pts;
+  }
+  const RV_PEBBLE_BASE = 28;
+  const RV_PEBBLE_MAX_EXTRA = 34;
   const pebbles = [];
   for (let i = 0; i < RV_PEBBLE_BASE + RV_PEBBLE_MAX_EXTRA; i++) {
+    const isStone = Math.random() < 0.35;
+    const size = isStone ? rand(5, 13) : rand(1.6, 4.5);
     pebbles.push({
-      x: rand(0.02, 0.92),
-      offsetFrac: rand(-0.8, 0.8),
-      size: rand(1.4, 3.6),
+      x: rand(0.015, 0.95),
+      offsetFrac: rand(-0.85, 0.85),
+      size,
+      shape: makeStoneShape(size),
+      rotation: rand(0, Math.PI * 2),
+      tint: rand(-18, 18),
       phase: rand(0, Math.PI * 2),
       glowSpeed: rand(0.0012, 0.0026),
     });
@@ -1033,42 +1051,108 @@
     bctx.restore();
   }
 
+  function drawStone(pb, cy, glow, alpha) {
+    const cx = pb.x * W;
+    const py = cy * H;
+    const warmth = Math.max(0, pb.tint);
+    const cool = Math.max(0, -pb.tint);
+    const r = Math.min(255, goldColor[0] + warmth);
+    const g = Math.max(120, goldColor[1] - cool * 0.4);
+    const b = Math.min(200, goldColor[2] + cool);
+
+    bctx.save();
+    bctx.translate(cx, py);
+    bctx.rotate(pb.rotation);
+    bctx.shadowColor = `rgba(${r | 0}, ${g | 0}, ${b | 0}, ${0.75 * glow})`;
+    bctx.shadowBlur = pb.size * 1.4;
+    bctx.beginPath();
+    pb.shape.forEach((p, i) => {
+      const sx = p.x * (0.85 + 0.25 * glow);
+      const sy = p.y * (0.85 + 0.25 * glow);
+      if (i === 0) bctx.moveTo(sx, sy); else bctx.lineTo(sx, sy);
+    });
+    bctx.closePath();
+    const grad = bctx.createLinearGradient(-pb.size, -pb.size, pb.size, pb.size);
+    grad.addColorStop(0, `rgba(${Math.min(255, r + 40) | 0}, ${Math.min(255, g + 40) | 0}, ${Math.min(255, b + 30) | 0}, ${alpha})`);
+    grad.addColorStop(1, `rgba(${r * 0.6 | 0}, ${g * 0.55 | 0}, ${b * 0.5 | 0}, ${alpha})`);
+    bctx.fillStyle = grad;
+    bctx.fill();
+    bctx.restore();
+  }
+
   function renderRiver(time) {
-    const growth = progress; // 0.82..1, subtle refinement driven by taps
-    const revealX = Math.min(0.94, growth * 1.02);
+    const revealX = RIVER_FULL_X; // always full length — taps drive intensity, not reach
+    const flowSpeed = 1 + progress * 0.5; // current runs a little livelier as taps rise
 
     drawTempleDoor(time);
 
-    // river band: sampled top/bottom edges, filled with the spiritual->physical gradient
-    const STEPS = 90;
-    bctx.save();
-    bctx.shadowColor = 'rgba(124, 58, 237, 0.25)';
-    bctx.shadowBlur = 16;
-    const grad = bctx.createLinearGradient(0, 0, W, 0);
-    grad.addColorStop(0, riverColorAt(0, 0.55));
-    grad.addColorStop(0.6, riverColorAt(0.6, 0.45));
-    grad.addColorStop(1, riverColorAt(1, 0.35));
-    bctx.fillStyle = grad;
-    bctx.beginPath();
+    const STEPS = 140;
+
+    // build the river's top/bottom edge samples once, reused for fill + clip
+    const topPts = [], botPts = [];
     for (let i = 0; i <= STEPS; i++) {
       const x = revealX * (i / STEPS);
-      const y = (riverCenterY(x, time) - riverHalfWidth(x, growth)) * H;
-      if (i === 0) bctx.moveTo(x * W, y); else bctx.lineTo(x * W, y);
+      const cy = riverCenterY(x, time);
+      const hw = riverHalfWidth(x);
+      topPts.push({ x, y: cy - hw });
+      botPts.push({ x, y: cy + hw });
     }
-    for (let i = STEPS; i >= 0; i--) {
-      const x = revealX * (i / STEPS);
-      const y = (riverCenterY(x, time) + riverHalfWidth(x, growth)) * H;
-      bctx.lineTo(x * W, y);
-    }
-    bctx.closePath();
-    bctx.fill();
+
+    // base water fill: spiritual->physical gradient
+    bctx.save();
+    bctx.shadowColor = 'rgba(124, 58, 237, 0.25)';
+    bctx.shadowBlur = 18;
+    const grad = bctx.createLinearGradient(0, 0, W, 0);
+    grad.addColorStop(0, riverColorAt(0, 0.6));
+    grad.addColorStop(0.55, riverColorAt(0.55, 0.5));
+    grad.addColorStop(1, riverColorAt(1, 0.38));
+    bctx.fillStyle = grad;
+    const riverPath = new Path2D();
+    topPts.forEach((p, i) => { const px = p.x * W, py = p.y * H; if (i === 0) riverPath.moveTo(px, py); else riverPath.lineTo(px, py); });
+    for (let i = botPts.length - 1; i >= 0; i--) riverPath.lineTo(botPts[i].x * W, botPts[i].y * H);
+    riverPath.closePath();
+    bctx.fill(riverPath);
     bctx.restore();
 
-    // bright glowing centerline current
+    // layered ripple/current streaks flowing along the river's own bends, clipped to the water
+    bctx.save();
+    bctx.clip(riverPath);
+    const RIPPLE_LAYERS = [
+      { freq: 5.5, speed: 0.00042, amp: 0.55, alpha: 0.14, width: 1.1 },
+      { freq: 8.2, speed: -0.0006, amp: 0.35, alpha: 0.1, width: 0.9 },
+      { freq: 3.1, speed: 0.00028, amp: 0.7, alpha: 0.16, width: 1.6 },
+      { freq: 11, speed: -0.00075, amp: 0.22, alpha: 0.09, width: 0.7 },
+    ];
+    RIPPLE_LAYERS.forEach((layer) => {
+      bctx.beginPath();
+      for (let i = 0; i <= STEPS; i++) {
+        const x = revealX * (i / STEPS);
+        const hw = riverHalfWidth(x);
+        const wobble = Math.sin(x * layer.freq + time * layer.speed * flowSpeed) * hw * layer.amp;
+        const y = (riverCenterY(x, time) + wobble) * H;
+        if (i === 0) bctx.moveTo(x * W, y); else bctx.lineTo(x * W, y);
+      }
+      bctx.strokeStyle = `rgba(220, 235, 255, ${layer.alpha})`;
+      bctx.lineWidth = layer.width;
+      bctx.stroke();
+    });
+
+    // a soft specular sweep of light drifting along the surface
+    const sweepT = reducedMotion ? 0.5 : (Math.sin(time * 0.00018) + 1) / 2;
+    const sweepX = sweepT * W;
+    const sweepGrad = bctx.createLinearGradient(sweepX - W * 0.18, 0, sweepX + W * 0.18, 0);
+    sweepGrad.addColorStop(0, 'rgba(255,255,255,0)');
+    sweepGrad.addColorStop(0.5, 'rgba(255,255,255,0.06)');
+    sweepGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    bctx.fillStyle = sweepGrad;
+    bctx.fillRect(0, 0, W, H);
+    bctx.restore();
+
+    // bright glowing centerline current (drawn after ripples, above the clip)
     bctx.save();
     bctx.shadowColor = 'rgba(200, 230, 255, 0.6)';
     bctx.shadowBlur = 10;
-    bctx.strokeStyle = 'rgba(230, 240, 255, 0.35)';
+    bctx.strokeStyle = 'rgba(230, 240, 255, 0.4)';
     bctx.lineWidth = 1.4;
     bctx.beginPath();
     for (let i = 0; i <= STEPS; i++) {
@@ -1079,21 +1163,15 @@
     bctx.stroke();
     bctx.restore();
 
-    // golden pebbles glowing in the riverbed, revealed progressively from the temple outward
+    // golden pebbles & stones of varying size in the riverbed, denser near the temple;
+    // taps reveal more of them and brighten their glow
     const activePebbles = Math.min(pebbles.length, RV_PEBBLE_BASE + Math.round(tapPct * RV_PEBBLE_MAX_EXTRA));
+    const pebbleBright = 1 + tapPct * 0.5;
     for (let i = 0; i < activePebbles; i++) {
       const pb = pebbles[i];
-      if (pb.x > revealX) continue;
-      const cy = riverCenterY(pb.x, time) + pb.offsetFrac * riverHalfWidth(pb.x, growth) * 0.8;
-      const glow = 0.55 + 0.45 * Math.sin(time * pb.glowSpeed + pb.phase);
-      bctx.save();
-      bctx.shadowColor = `rgba(255, 200, 90, ${0.7 * glow})`;
-      bctx.shadowBlur = pb.size * 3;
-      bctx.beginPath();
-      bctx.arc(pb.x * W, cy * H, pb.size * (0.8 + 0.3 * glow), 0, Math.PI * 2);
-      bctx.fillStyle = `rgba(${goldColor[0]}, ${goldColor[1]}, ${goldColor[2]}, ${0.55 + 0.35 * glow})`;
-      bctx.fill();
-      bctx.restore();
+      const cy = riverCenterY(pb.x, time) + pb.offsetFrac * riverHalfWidth(pb.x) * 0.85;
+      const glow = (0.55 + 0.45 * Math.sin(time * pb.glowSpeed + pb.phase)) * pebbleBright;
+      drawStone(pb, cy, glow, Math.min(1, 0.6 + 0.35 * glow));
     }
 
     // ambient embers drifting between the realms
@@ -1119,16 +1197,15 @@
 
     // embers riding the current from the temple doors out toward the physical bank
     rvFlowEmbers.forEach((fe) => {
-      if (revealX < 0.05) return;
       if (!reducedMotion) {
-        fe.t += fe.speed * activity * 16;
+        fe.t += fe.speed * activity * flowSpeed * 16;
         if (fe.t > revealX) fe.t = 0;
       } else {
         fe.t = Math.min(fe.t, revealX);
       }
       const x = Math.min(fe.t, revealX);
-      const y = riverCenterY(x, time) + fe.offsetFrac * riverHalfWidth(x, progress) * 0.7;
-      const alpha = Math.min(1, 0.85 * (1 - (fe.t / Math.max(0.01, revealX)) * 0.3) * (1 + tapPct * 0.6));
+      const y = riverCenterY(x, time) + fe.offsetFrac * riverHalfWidth(x) * 0.7;
+      const alpha = Math.min(1, 0.85 * (1 - (fe.t / revealX) * 0.3) * (1 + tapPct * 0.6));
       bctx.save();
       bctx.shadowColor = 'rgba(255, 235, 200, 0.95)';
       bctx.shadowBlur = 10 + tapPct * 8;
