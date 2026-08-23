@@ -20,10 +20,21 @@
     position: relative;
     width: 100vw; height: 100vh;
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    justify-content: center;
+    justify-content: space-between;
+    padding: 0 clamp(24px, 6vw, 110px);
+    gap: 4vw;
     cursor: pointer;
+  }
+
+  @media (max-width: 860px) {
+    #app {
+      flex-direction: column;
+      justify-content: center;
+      gap: 32px;
+      padding: 0 24px;
+    }
   }
 
   /* ambient glow blobs */
@@ -266,6 +277,58 @@
     padding: 2px 7px;
     font-size: 12px;
     font-family: inherit;
+  }
+
+  #verse-panel {
+    position: relative;
+    z-index: 1;
+    max-width: min(38vw, 480px);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  #verse-panel.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  @media (max-width: 860px) {
+    #verse-panel {
+      max-width: 90vw;
+      text-align: center;
+    }
+  }
+
+  #verse-phase {
+    font-size: clamp(11px, 1.3vmin, 13px);
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #c4b5fd, #67e8f9);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    margin-bottom: 14px;
+  }
+
+  #verse-text {
+    font-size: clamp(17px, 2.6vmin, 26px);
+    font-weight: 600;
+    line-height: 1.45;
+    color: rgba(255,255,255,0.92);
+    font-style: italic;
+  }
+
+  #verse-text::before { content: open-quote; }
+  #verse-text::after { content: close-quote; }
+
+  #verse-ref {
+    margin-top: 16px;
+    font-size: clamp(12px, 1.5vmin, 14px);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: rgba(196, 181, 253, 0.85);
   }
 
   #toast {
@@ -524,6 +587,11 @@
       <div id="phase"></div>
     </div>
   </div>
+  <div id="verse-panel">
+    <div id="verse-phase"></div>
+    <div id="verse-text"></div>
+    <div id="verse-ref"></div>
+  </div>
 </div>
 
 <div id="toast">🎉 100 taps reached!</div>
@@ -558,14 +626,34 @@
   const CIRC = 1256; // 2 * PI * 200, matches stroke-dasharray
 
   const PHASES = [
-    { max: 25, label: 'Imagining' },
-    { max: 50, label: 'Musing' },
-    { max: 75, label: 'Muttering' },
-    { max: 100, label: 'Manifesting' },
+    {
+      max: 25, label: 'Imagining',
+      verse: 'As he thinketh in his heart, so is he.',
+      ref: 'Proverbs 23:7',
+    },
+    {
+      max: 50, label: 'Musing',
+      verse: 'Let the words of my mouth and the meditation of my heart be acceptable in thy sight.',
+      ref: 'Psalm 19:14',
+    },
+    {
+      max: 75, label: 'Muttering',
+      verse: 'This book of the law shall not depart out of thy mouth; thou shalt meditate therein day and night.',
+      ref: 'Joshua 1:8',
+    },
+    {
+      max: 100, label: 'Manifesting',
+      verse: 'Whatsoever things ye desire, when ye pray, believe that ye receive them, and ye shall have them.',
+      ref: 'Mark 11:24',
+    },
   ];
   function phaseForCount(c) {
     return PHASES.find((p) => c <= p.max) || PHASES[PHASES.length - 1];
   }
+  const versePhaseEl = document.getElementById('verse-phase');
+  const verseTextEl = document.getElementById('verse-text');
+  const verseRefEl = document.getElementById('verse-ref');
+  const versePanelEl = document.getElementById('verse-panel');
   let lastPhaseLabel = null;
   function updatePhase() {
     const phase = phaseForCount(count);
@@ -575,6 +663,15 @@
       phaseEl.classList.remove('show');
       void phaseEl.offsetWidth;
       phaseEl.classList.add('show');
+
+      if (versePanelEl) {
+        versePanelEl.classList.remove('show');
+        void versePanelEl.offsetWidth;
+        versePhaseEl.textContent = phase.label;
+        verseTextEl.textContent = phase.verse;
+        verseRefEl.textContent = phase.ref;
+        versePanelEl.classList.add('show');
+      }
     }
   }
 
