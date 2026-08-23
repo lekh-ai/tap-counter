@@ -290,7 +290,12 @@
     display: none;
     opacity: 0;
     transform: translateY(6px);
-    transition: opacity 0.6s ease, transform 0.6s ease;
+    transition: opacity 0.6s ease, transform 0.6s ease, background 0.2s ease;
+    padding: 28px 32px;
+    border-radius: 20px;
+    background: rgba(15, 12, 24, 0.55);
+    backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,0.1);
   }
   #verse-panel.show {
     display: block;
@@ -649,6 +654,10 @@
 <canvas id="bg-webgl"></canvas>
 <div id="river-debug">
   <h4>Scene Controls</h4>
+  <div id="verse-ctrl-group">
+    <label><span>Verse box opacity</span><span id="dbg-verse-opacity-val">55%</span></label>
+    <input type="range" id="dbg-verse-opacity" min="0" max="100" step="5" value="55">
+  </div>
   <div id="river-ctrl-group">
     <label><span>Gold count</span><span id="dbg-count-val">72</span></label>
     <input type="range" id="dbg-count" min="10" max="200" step="1" value="72">
@@ -1418,6 +1427,30 @@
     const saved = JSON.parse(localStorage.getItem(VERSE_KEY) || 'null');
     if (saved && saved.text) verseState = saved;
   } catch (e) {}
+
+  // translucent box behind the verse text — opacity adjustable in the C debug panel
+  const VERSE_OPACITY_KEY = 'god-challenge-verse-opacity';
+  const dbgVerseOpacity = document.getElementById('dbg-verse-opacity');
+  const dbgVerseOpacityVal = document.getElementById('dbg-verse-opacity-val');
+  let verseBoxOpacity = 55;
+  try {
+    const savedOpacity = parseInt(localStorage.getItem(VERSE_OPACITY_KEY), 10);
+    if (Number.isFinite(savedOpacity) && savedOpacity >= 0 && savedOpacity <= 100) verseBoxOpacity = savedOpacity;
+  } catch (e) {}
+  function applyVerseBoxOpacity() {
+    versePanelEl.style.background = `rgba(15, 12, 24, ${verseBoxOpacity / 100})`;
+    if (dbgVerseOpacityVal) dbgVerseOpacityVal.textContent = verseBoxOpacity + '%';
+    if (dbgVerseOpacity) dbgVerseOpacity.value = verseBoxOpacity;
+  }
+  applyVerseBoxOpacity();
+  if (dbgVerseOpacity) {
+    dbgVerseOpacity.addEventListener('input', (e) => {
+      e.stopPropagation();
+      verseBoxOpacity = parseInt(dbgVerseOpacity.value, 10);
+      applyVerseBoxOpacity();
+      try { localStorage.setItem(VERSE_OPACITY_KEY, String(verseBoxOpacity)); } catch (err) {}
+    });
+  }
 
   function renderVerse() {
     const hasVerse = !!(verseState && verseState.text);
