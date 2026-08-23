@@ -488,6 +488,7 @@
   <label><span>River speed</span><span id="dbg-speed-val">1.0×</span></label>
   <input type="range" id="dbg-speed" min="0" max="4" step="0.05" value="1">
   <div class="hint">Left-drag: orbit · Right-drag: pan<br>Scroll: zoom · Press C to hide</div>
+  <div id="dbg-cam-info" class="hint" style="margin-top:10px; color:rgba(196,181,253,0.9); font-family:monospace; white-space:pre-line;"></div>
 </div>
 <div id="symbols"></div>
 <div id="app">
@@ -1660,6 +1661,7 @@
   const dbgSizeVal = document.getElementById('dbg-size-val');
   const dbgSpeed = document.getElementById('dbg-speed');
   const dbgSpeedVal = document.getElementById('dbg-speed-val');
+  const camInfo = document.getElementById('dbg-cam-info');
 
   dbgCount.addEventListener('input', () => {
     dbgCountVal.textContent = dbgCount.value;
@@ -1730,6 +1732,10 @@
     if (controls.enabled) {
       // user is orbiting manually (debug panel open) — don't fight their input
       controls.update();
+      const p = camera.position, tg = controls.target;
+      camInfo.textContent =
+        `pos: (${p.x.toFixed(0)}, ${p.y.toFixed(0)}, ${p.z.toFixed(0)})\n` +
+        `target: (${tg.x.toFixed(0)}, ${tg.y.toFixed(0)}, ${tg.z.toFixed(0)})`;
     } else if (!prefersReducedMotion) {
       // gentle cinematic camera sway, around the temple-facing base position/target
       camera.position.x = -260 + Math.sin(t * 0.05) * 14;
