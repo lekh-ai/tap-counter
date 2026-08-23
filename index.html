@@ -323,12 +323,35 @@
     z-index: 0;
     pointer-events: none;
   }
+
+  /* floating cosmic / angelic symbols */
+  #symbols {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .symbol {
+    position: absolute;
+    filter: drop-shadow(0 0 6px currentColor);
+    animation: symbol-float ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+  .symbol.spirit { color: rgba(196, 181, 253, 0.55); }
+  .symbol.phys { color: rgba(103, 232, 249, 0.5); }
+
+  @keyframes symbol-float {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    50% { transform: translateY(-16px) rotate(4deg); }
+  }
 </style>
 </head>
 <body>
 <div class="realm spiritual"><span>Spiritual</span></div>
 <div class="realm physical"><span>Physical</span></div>
 <canvas id="bg-canvas"></canvas>
+<div id="symbols"></div>
 <div id="app">
   <div id="titles">
     <div id="title">The God Challenge</div>
@@ -453,6 +476,36 @@
   const canvas = document.getElementById('bg-canvas');
   const bctx = canvas.getContext('2d');
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // ---- Floating cosmic / angelic background symbols ----
+  function initSymbols() {
+    const container = document.getElementById('symbols');
+    const SPIRIT_SYMBOLS = ['🕊️', '🪶', '👼', '✨', '🌟'];
+    const PHYS_SYMBOLS = ['🪐', '🌙', '⭐', '🌌', '🌿', '🍃'];
+    const total = 16;
+    for (let i = 0; i < total; i++) {
+      const isSpirit = i % 2 === 0;
+      const el = document.createElement('div');
+      const glyph = isSpirit
+        ? SPIRIT_SYMBOLS[Math.floor(Math.random() * SPIRIT_SYMBOLS.length)]
+        : PHYS_SYMBOLS[Math.floor(Math.random() * PHYS_SYMBOLS.length)];
+      el.textContent = glyph;
+      el.className = `symbol ${isSpirit ? 'spirit' : 'phys'}`;
+      const leftPct = isSpirit ? Math.random() * 30 : 70 + Math.random() * 30;
+      el.style.left = `${leftPct}%`;
+      el.style.top = `${8 + Math.random() * 78}%`;
+      el.style.fontSize = `${14 + Math.random() * 20}px`;
+      el.style.opacity = (0.25 + Math.random() * 0.35).toFixed(2);
+      if (!reducedMotion) {
+        el.style.animationDuration = `${8 + Math.random() * 10}s`;
+        el.style.animationDelay = `${-Math.random() * 10}s`;
+      } else {
+        el.style.animation = 'none';
+      }
+      container.appendChild(el);
+    }
+  }
+  initSymbols();
 
   let W = 0, H = 0;
   function resizeCanvas() {
