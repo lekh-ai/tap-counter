@@ -688,6 +688,17 @@
     bctx.translate(p.x * W, p.y * H);
     bctx.rotate(angle);
     bctx.globalAlpha = alpha;
+
+    // stem — drawn back along the branch's own direction so the leaf
+    // always reads as attached, even when the branch stroke itself is thin/faint
+    bctx.beginPath();
+    bctx.moveTo(-size * 0.9, 0);
+    bctx.lineTo(0, 0);
+    bctx.strokeStyle = color;
+    bctx.lineWidth = Math.max(1, size * 0.16);
+    bctx.lineCap = 'round';
+    bctx.stroke();
+
     bctx.shadowColor = color;
     bctx.shadowBlur = size * 0.6;
     bctx.beginPath();
