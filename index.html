@@ -1223,6 +1223,15 @@
     else renderBranches(time);
   }
 
+  // the floating angelic/cosmic symbols and realm labels are a "branches" scene
+  // motif only — the river scene has no such manifesting/realm attribute
+  function applySceneChrome(scene) {
+    const show = scene === 'branches' ? '' : 'none';
+    document.querySelectorAll('.realm').forEach((el) => { el.style.display = show; });
+    const symbolsEl = document.getElementById('symbols');
+    if (symbolsEl) symbolsEl.style.display = show;
+  }
+
   function setScene(scene) {
     if (scene !== 'branches' && scene !== 'river') return;
     currentScene = scene;
@@ -1230,6 +1239,7 @@
     document.querySelectorAll('#scene-toggle button').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.scene === scene);
     });
+    applySceneChrome(scene);
     renderScene(0);
   }
 
@@ -1313,6 +1323,7 @@
   setRootProgress(Math.min(count / 100, 1));
   updatePhase();
 
+  applySceneChrome(currentScene);
   document.querySelectorAll('#scene-toggle button').forEach((btn) => {
     btn.classList.toggle('active', btn.dataset.scene === currentScene);
     btn.addEventListener('click', (e) => {
