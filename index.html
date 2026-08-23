@@ -1704,7 +1704,7 @@
   scene.fog = new THREE.FogExp2(0x0a0a12, 0.0016);
 
   const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 1, 4000);
-  camera.position.set(-178, 90, 252);
+  camera.position.set(-178, 89, 253);
   camera.lookAt(-145, 50, -57);
 
   scene.add(new THREE.HemisphereLight(0x9d7bff, 0x08050c, 0.7));
@@ -2254,7 +2254,7 @@
       // while a verse is showing — found via the debug panel and kept until removed
       const base = gs.hasVerse
         ? { x: -171, y: 95, z: 253, tx: -91, ty: 42, tz: -59 }
-        : { x: -178, y: 90, z: 252, tx: -145, ty: 50, tz: -57 };
+        : { x: -178, y: 89, z: 253, tx: -145, ty: 50, tz: -57 };
       const sway = prefersReducedMotion ? 0 : 1;
       camera.position.x = base.x + Math.sin(t * 0.05) * 14 * sway;
       camera.position.y = base.y + Math.sin(t * 0.04) * 6 * sway;
