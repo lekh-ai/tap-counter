@@ -1145,16 +1145,6 @@
   const pmrem = new THREE.PMREMGenerator(renderer);
   scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-  // dark rocky ground so the river reads as cutting through terrain rather than
-  // floating over a hard-edged void, and so the water has something to reflect
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(3000, 3000, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x0e0a18, roughness: 0.95, metalness: 0.05 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -3;
-  scene.add(ground);
-
   // ---- river path: winds left (spiritual) to right/far (physical) in world X/Z ----
   const RANGE = 260;
   function pathXZ(u) {
@@ -1165,6 +1155,92 @@
   function pathHalfWidth(u) {
     return 60 + Math.sin(u * 5.5) * 10 - u * 16;
   }
+  // a procedurally-painted rock image (not a flat color) gives the terrain real surface detail
+  function makeRockTexture() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 512;
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#0f0a1a';
+    ctx.fillRect(0, 0, 512, 512);
+    for (let i = 0; i < 2200; i++) {
+      const x = Math.random() * 512, y = Math.random() * 512;
+      const r = 1 + Math.random() * 5;
+      const shade = 10 + Math.random() * 40;
+      const tint = Math.random() < 0.5 ? [124, 58, 237] : [255, 200, 90];
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${shade + tint[0] * 0.06}, ${shade + tint[1] * 0.03}, ${shade + tint[2] * 0.05}, ${0.15 + Math.random() * 0.25})`;
+      ctx.fill();
+    }
+    for (let i = 0; i < 60; i++) {
+      ctx.strokeStyle = `rgba(0,0,0,${0.2 + Math.random() * 0.2})`;
+      ctx.lineWidth = 0.6 + Math.random();
+      ctx.beginPath();
+      let x = Math.random() * 512, y = Math.random() * 512;
+      ctx.moveTo(x, y);
+      for (let s = 0; s < 5; s++) {
+        x += (Math.random() - 0.5) * 60;
+        y += (Math.random() - 0.5) * 60;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(24, 24);
+    return tex;
+  }
+  const rockTexture = makeRockTexture();
+  const rockMat = new THREE.MeshStandardMaterial({ map: rockTexture, roughness: 0.92, metalness: 0.08 });
+
+  // dark rocky ground so the river reads as cutting through terrain rather than
+  // floating over a hard-edged void, and so the water has something to reflect
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000, 1, 1), rockMat);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.y = -4;
+  scene.add(ground);
+
+  // real riverbank geometry that physically rises out of the water on both sides,
+  // instead of the water sitting as a flat rectangle over empty space
+  function buildBankGeometry(side) {
+    const SEG = 140;
+    const positions = [], normals = [], uvs = [];
+    const centers = [];
+    for (let i = 0; i <= SEG; i++) {
+      const u = i / SEG;
+      centers.push({ u, ...pathXZ(u), hw: pathHalfWidth(u) });
+    }
+    for (let i = 0; i <= SEG; i++) {
+      const c = centers[i];
+      const prev = centers[Math.max(0, i - 1)];
+      const next = centers[Math.min(SEG, i + 1)];
+      let tx = next.x - prev.x, tz = next.z - prev.z;
+      const tl = Math.hypot(tx, tz) || 1;
+      tx /= tl; tz /= tl;
+      const px = -tz, pz = tx;
+      const bankRise = 5 + Math.sin(c.u * 9 + side) * 2.2 + Math.sin(c.u * 3.3) * 1.6;
+      const innerR = c.hw - 3; // tuck slightly under the water edge so there's no visible seam
+      const outerR = c.hw + 90;
+      positions.push(c.x + px * side * innerR, -3, c.z + pz * side * innerR);
+      positions.push(c.x + px * side * outerR, bankRise, c.z + pz * side * outerR);
+      normals.push(0, 1, 0, 0, 1, 0);
+      uvs.push(c.u * 8, 0, c.u * 8, 3);
+    }
+    const indices = [];
+    for (let i = 0; i < SEG; i++) {
+      const a = i * 2, b = i * 2 + 1, cIdx = (i + 1) * 2, d = (i + 1) * 2 + 1;
+      indices.push(a, cIdx, b, b, cIdx, d);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
+  }
+  scene.add(new THREE.Mesh(buildBankGeometry(1), rockMat));
+  scene.add(new THREE.Mesh(buildBankGeometry(-1), rockMat));
 
   function buildRiverGeometry() {
     const SEG = 140;
