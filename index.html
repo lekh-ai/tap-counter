@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Tap Counter</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: radial-gradient(circle at 50% 0%, #1c1830 0%, #0a0a12 55%, #050507 100%);
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    overflow: hidden;
+    touch-action: manipulation;
+  }
+
+  #app {
+    position: relative;
+    width: 100vw; height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  /* ambient glow blobs */
+  #app::before, #app::after {
+    content: "";
+    position: absolute;
+    width: 45vmax; height: 45vmax;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+  }
+  #app::before {
+    background: #7c3aed;
+    top: -15vmax; left: -10vmax;
+  }
+  #app::after {
+    background: #06b6d4;
+    bottom: -15vmax; right: -10vmax;
+  }
+
+  #ring-wrap {
+    position: relative;
+    width: min(60vmin, 480px);
+    height: min(60vmin, 480px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  #ring {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  #ring circle {
+    fill: none;
+    stroke-width: 6;
+    stroke-linecap: round;
+  }
+
+  #ring .track {
+    stroke: rgba(255,255,255,0.08);
+  }
+
+  #ring .progress {
+    stroke: url(#grad);
+    stroke-dasharray: 1256;
+    stroke-dashoffset: 1256;
+    transition: stroke-dashoffset 0.25s ease;
+  }
+
+  #core {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 78%;
+    height: 78%;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 0 60px rgba(124, 58, 237, 0.15), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+
+  #count {
+    font-size: 16vw;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #fff 0%, #c4b5fd 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    transition: transform 0.08s ease;
+  }
+
+  #count.pulse {
+    transform: scale(1.1);
+  }
+
+  #hint {
+    margin-top: 10px;
+    font-size: clamp(12px, 1.6vmin, 15px);
+    color: rgba(255,255,255,0.35);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+
+  #reset {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 28px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    cursor: pointer;
+    z-index: 10;
+    transition: background 0.15s ease, transform 0.1s ease, border-color 0.15s ease;
+  }
+
+  #reset:hover {
+    background: rgba(255,255,255,0.1);
+    border-color: rgba(255,255,255,0.2);
+  }
+
+  #reset:active {
+    transform: translateX(-50%) scale(0.96);
+  }
+
+  #reset kbd {
+    background: rgba(0,0,0,0.4);
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 6px;
+    padding: 2px 7px;
+    font-size: 12px;
+    font-family: inherit;
+  }
+
+  #toast {
+    position: fixed;
+    top: 40px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-20px);
+    padding: 16px 28px;
+    background: linear-gradient(135deg, #7c3aed, #06b6d4);
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: clamp(14px, 2vmin, 18px);
+    box-shadow: 0 10px 40px rgba(124, 58, 237, 0.4);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    z-index: 20;
+    white-space: nowrap;
+  }
+
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  #titles {
+    position: absolute;
+    top: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    text-align: center;
+    width: 90vw;
+    max-width: 700px;
+    pointer-events: none;
+  }
+
+  #title {
+    font-size: clamp(32px, 6vmin, 56px);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, #fff 0%, #c4b5fd 50%, #7c3aed 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 40px rgba(124, 58, 237, 0.5);
+  }
+
+  #subtitle {
+    margin-top: 10px;
+    font-size: clamp(12px, 1.8vmin, 16px);
+    font-weight: 500;
+    color: rgba(255,255,255,0.45);
+    letter-spacing: 0.01em;
+  }
+
+  /* realms */
+  .realm {
+    position: fixed;
+    top: 0; bottom: 0;
+    width: min(14vw, 140px);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .realm.spiritual {
+    left: 0;
+    background: linear-gradient(to right, rgba(124,58,237,0.28), transparent);
+  }
+  .realm.physical {
+    right: 0;
+    background: linear-gradient(to left, rgba(6,182,212,0.22), transparent);
+  }
+  .realm span {
+    position: absolute;
+    top: 50%; left: 50%;
+    writing-mode: vertical-rl;
+    transform: translate(-50%, -50%);
+    text-transform: uppercase;
+    letter-spacing: 0.3em;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.3);
+  }
+
+  /* root/ember background */
+  #bg-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 0;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div class="realm spiritual"><span>Spiritual</span></div>
+<div class="realm physical"><span>Physical</span></div>
+<canvas id="bg-canvas"></canvas>
+<div id="app">
+  <div id="titles">
+    <div id="title">The God Challenge</div>
+    <div id="subtitle">Imagining, Musing, Muttering &rarr; Manifesting to Natural from Spiritual</div>
+  </div>
+  <div id="ring-wrap">
+    <svg id="ring" viewBox="0 0 420 420">
+      <defs>
+        <linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#7c3aed"/>
+          <stop offset="100%" stop-color="#06b6d4"/>
+        </linearGradient>
+      </defs>
+      <circle class="track" cx="210" cy="210" r="200"/>
+      <circle class="progress" cx="210" cy="210" r="200"/>
+    </svg>
+    <div id="core">
+      <div id="count">0</div>
+      <div id="hint">tap anywhere</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast">🎉 100 taps reached!</div>
+<button id="reset">Reset <kbd>R</kbd></button>
+
+<script>
+  let count = 0;
+  const countEl = document.getElementById('count');
+  const app = document.getElementById('app');
+  const resetBtn = document.getElementById('reset');
+  const progressEl = document.querySelector('#ring .progress');
+  const toastEl = document.getElementById('toast');
+  const CIRC = 1256; // 2 * PI * 200, matches stroke-dasharray
+  let audioCtx = null;
+  function getAudioCtx() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+
+  function updateDisplay() {
+    countEl.textContent = count;
+    countEl.classList.remove('pulse');
+    void countEl.offsetWidth;
+    countEl.classList.add('pulse');
+
+    const pct = Math.min(count / 100, 1);
+    progressEl.style.strokeDashoffset = CIRC * (1 - pct);
+    setRootProgress(pct);
+  }
+
+  // ---- Root / ember background engine (canvas) ----
+  const canvas = document.getElementById('bg-canvas');
+  const bctx = canvas.getContext('2d');
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let W = 0, H = 0;
+  function resizeCanvas() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    H = window.innerHeight;
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function clamp01(v) { return Math.max(0, Math.min(1, v)); }
+
+  // build a jagged organic polyline of normalized points (x,y in 0..1)
+  function buildPolyline(x0, y0, x1, y1, segments, wobble) {
+    const pts = [{ x: x0, y: y0 }];
+    for (let i = 1; i < segments; i++) {
+      const t = i / segments;
+      const bow = Math.sin(t * Math.PI) * wobble * 0.6;
+      pts.push({
+        x: lerp(x0, x1, t),
+        y: lerp(y0, y1, t) + (Math.random() - 0.5) * wobble + bow * (Math.random() - 0.5),
+      });
+    }
+    pts.push({ x: x1, y: y1 });
+    return pts;
+  }
+
+  // wave constants — each depth has its own frequency, but a child always inherits
+  // its parent's live offset at the exact attachment point so joins never separate.
+  const TRUNK_FREQ = 0.0005, BRANCH_FREQ = 0.0011, CHILD_FREQ = 0.0014;
+  const TRUNK_WAVE_AMP = 0.006, BRANCH_WAVE_AMP = 0.014, CHILD_WAVE_AMP = 0.018;
+
+  function makeBranch(parentPts, depth) {
+    const idx = 1 + Math.floor(Math.random() * (parentPts.length - 2));
+    const parentT = idx / (parentPts.length - 1);
+    const start = parentPts[idx];
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    const spanX = rand(0.06, 0.16) * (depth === 1 ? 1 : 0.6);
+    const spanY = dir * rand(0.03, 0.09);
+    const endX = Math.min(0.94, start.x + spanX);
+    const endY = clamp01(start.y + spanY);
+    const pts = buildPolyline(start.x, start.y, endX, endY, 4, 0.02);
+    const branch = {
+      pts,
+      parentT,
+      phase: rand(0, Math.PI * 2),
+      appearAt: rand(0.02, depth === 1 ? 0.55 : 0.75),
+      growthSpeed: rand(0.8, 1.4),
+      baseWidth: depth === 1 ? rand(1.1, 1.9) : rand(0.5, 0.9),
+      alpha: depth === 1 ? rand(0.55, 0.8) : rand(0.35, 0.55),
+      children: [],
+    };
+    if (depth === 1 && Math.random() < 0.8) {
+      branch.children.push(makeBranch(pts, 2));
+      if (Math.random() < 0.4) branch.children.push(makeBranch(pts, 2));
+    }
+    return branch;
+  }
+
+  function buildTrunks(count) {
+    const trunks = [];
+    for (let i = 0; i < count; i++) {
+      const y = 0.1 + (i * (0.8 / (count - 1))) + rand(-0.02, 0.02);
+      const endY = clamp01(y + rand(-0.05, 0.05));
+      const pts = buildPolyline(0, y, 0.9, endY, 12, 0.035);
+      const trunk = {
+        pts,
+        growthSpeed: rand(0.85, 1.2),
+        baseWidth: rand(2.6, 4.2),
+        tipWidth: rand(0.35, 0.6),
+        phase: rand(0, Math.PI * 2),
+        branches: [],
+      };
+      const branchCount = 4 + Math.floor(Math.random() * 4);
+      for (let b = 0; b < branchCount; b++) trunk.branches.push(makeBranch(pts, 1));
+      trunks.push(trunk);
+    }
+    return trunks;
+  }
+
+  const trunks = buildTrunks(6);
+
+  function trunkWaveAt(trunk, t, time) {
+    return TRUNK_WAVE_AMP * t * Math.sin(time * TRUNK_FREQ + trunk.phase);
+  }
+  function branchWaveAt(trunk, branch, s, time) {
+    return trunkWaveAt(trunk, branch.parentT, time) + BRANCH_WAVE_AMP * s * Math.sin(time * BRANCH_FREQ + branch.phase);
+  }
+  function childWaveAt(trunk, branch, child, u, time) {
+    return branchWaveAt(trunk, branch, child.parentT, time) + CHILD_WAVE_AMP * u * Math.sin(time * CHILD_FREQ + child.phase);
+  }
+
+  // point along a polyline at normalized reveal fraction t (0..1); waveFn(t, time) supplies extra y-offset
+  function pointAt(pts, t, waveFn, time) {
+    const total = pts.length - 1;
+    const f = clamp01(t) * total;
+    const i = Math.min(Math.floor(f), total - 1);
+    const local = f - i;
+    const a = pts[i], b = pts[Math.min(i + 1, total)];
+    const x = lerp(a.x, b.x, local);
+    let y = lerp(a.y, b.y, local);
+    if (waveFn && !reducedMotion) y += waveFn(t, time);
+    return { x, y };
+  }
+
+  function strokeGrowingLine(pts, reveal, widthStart, widthEnd, alpha, time, waveFn, colorStops) {
+    if (reveal <= 0) return null;
+    const steps = Math.max(2, Math.round((pts.length - 1) * clamp01(reveal)) + 1);
+    let prev = pointAt(pts, 0, waveFn, time);
+    let tip = prev;
+    for (let s = 1; s <= steps; s++) {
+      const localT = Math.min(1, s / (pts.length - 1));
+      const revealT = Math.min(localT, reveal);
+      const cur = pointAt(pts, revealT, waveFn, time);
+      const segT = revealT;
+      const w = lerp(widthStart, widthEnd, segT);
+      bctx.beginPath();
+      bctx.moveTo(prev.x * W, prev.y * H);
+      bctx.lineTo(cur.x * W, cur.y * H);
+      bctx.lineWidth = w;
+      bctx.strokeStyle = colorStops(segT, alpha);
+      bctx.stroke();
+      tip = cur;
+      prev = cur;
+      if (revealT >= reveal) break;
+    }
+    return tip;
+  }
+
+  const spiritColor = [124, 58, 237];
+  const physColor = [6, 182, 212];
+  function rootColorAt(t, alpha) {
+    const c = t < 0.6
+      ? spiritColor
+      : [
+          lerp(spiritColor[0], physColor[0], (t - 0.6) / 0.4),
+          lerp(spiritColor[1], physColor[1], (t - 0.6) / 0.4),
+          lerp(spiritColor[2], physColor[2], (t - 0.6) / 0.4),
+        ];
+    return `rgba(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}, ${alpha})`;
+  }
+
+  // ember particles: ambient drifters + a few that ride along trunks toward the physical side
+  const EMBER_BASE = 26;
+  const EMBER_MAX_EXTRA = 20;
+  const embers = [];
+  for (let i = 0; i < EMBER_BASE + EMBER_MAX_EXTRA; i++) {
+    embers.push({
+      kind: 'ambient',
+      x: Math.random(), y: Math.random(),
+      vx: rand(0.00006, 0.00016),
+      vy: rand(-0.00004, 0.00004),
+      size: rand(0.8, 2.2),
+      baseAlpha: rand(0.15, 0.4),
+      phase: rand(0, Math.PI * 2),
+    });
+  }
+  function makeFlowEmber(path, growthSpeedOwner, appearAt) {
+    return {
+      path,
+      appearAt: appearAt || 0,
+      growthSpeedOwner,
+      t: Math.random(),
+      speed: rand(0.00009, 0.0002),
+      size: rand(1.4, 2.4),
+    };
+  }
+
+  const flowEmbers = [];
+  trunks.forEach((trunk) => {
+    flowEmbers.push(makeFlowEmber(trunk.pts, trunk, 0));
+    trunk.branches.forEach((branch) => {
+      flowEmbers.push(makeFlowEmber(branch.pts, trunk, branch.appearAt));
+      branch.children.forEach((child) => {
+        flowEmbers.push(makeFlowEmber(child.pts, trunk, child.appearAt));
+      });
+    });
+  });
+
+  const BASE_GROWTH = 0.82; // roots start mostly established; taps add subtle refinement
+  let progress = BASE_GROWTH;
+  let targetProgress = BASE_GROWTH;
+  let tapPct = 0; // raw count/100, drives ember count + brightness
+  function setRootProgress(p) {
+    tapPct = clamp01(p);
+    targetProgress = BASE_GROWTH + (1 - BASE_GROWTH) * tapPct;
+    if (reducedMotion) {
+      progress = targetProgress;
+      renderScene(0);
+    }
+  }
+
+  function renderScene(time) {
+    bctx.clearRect(0, 0, W, H);
+
+    // roots
+    trunks.forEach((trunk) => {
+      const reveal = clamp01(progress * trunk.growthSpeed * 1.15);
+      if (reveal <= 0) return;
+      const widthScale = 0.35 + 0.65 * progress;
+      strokeGrowingLine(
+        trunk.pts, reveal,
+        trunk.baseWidth * widthScale, trunk.tipWidth * widthScale,
+        0.8, time, (t, tm) => trunkWaveAt(trunk, t, tm),
+        (t, a) => rootColorAt(t, a * (1 - t * 0.5))
+      );
+
+      trunk.branches.forEach((branch) => {
+        if (progress < branch.appearAt) return;
+        const bReveal = clamp01(((progress - branch.appearAt) / Math.max(0.01, 1 - branch.appearAt)) * branch.growthSpeed * 1.3);
+        if (bReveal <= 0) return;
+        strokeGrowingLine(
+          branch.pts, bReveal,
+          branch.baseWidth * widthScale, branch.baseWidth * widthScale * 0.15,
+          branch.alpha, time, (s, tm) => branchWaveAt(trunk, branch, s, tm),
+          (t, a) => rootColorAt(branch.pts[0].x + t * 0.1, a * (1 - bReveal * 0.3) * (1 - t))
+        );
+        branch.children.forEach((child) => {
+          if (progress < child.appearAt) return;
+          const cReveal = clamp01(((progress - child.appearAt) / Math.max(0.01, 1 - child.appearAt)) * child.growthSpeed * 1.3);
+          if (cReveal <= 0) return;
+          strokeGrowingLine(
+            child.pts, cReveal,
+            child.baseWidth * widthScale, child.baseWidth * widthScale * 0.1,
+            child.alpha, time, (u, tm) => childWaveAt(trunk, branch, child, u, tm),
+            (t, a) => rootColorAt(child.pts[0].x + t * 0.1, a * (1 - t))
+          );
+        });
+      });
+    });
+
+    // ambient embers — count and brightness both grow subtly with tap count
+    const activity = 1 + progress * 0.6;
+    const activeEmberCount = Math.min(embers.length, EMBER_BASE + Math.round(tapPct * EMBER_MAX_EXTRA));
+    const brightBoost = 1 + tapPct * 0.9;
+    embers.slice(0, activeEmberCount).forEach((e) => {
+      if (!reducedMotion) {
+        e.x += e.vx * activity * 16;
+        e.y += e.vy * activity * 16 + Math.sin(time * 0.0004 + e.phase) * 0.00002;
+        if (e.x > 1.05) { e.x = -0.05; e.y = Math.random(); }
+      }
+      const flicker = reducedMotion ? 1 : 0.7 + 0.3 * Math.sin(time * 0.0015 + e.phase);
+      bctx.save();
+      bctx.shadowColor = 'rgba(196, 181, 253, 0.9)';
+      bctx.shadowBlur = 8 + tapPct * 6;
+      bctx.beginPath();
+      bctx.arc(e.x * W, e.y * H, e.size * (1 + tapPct * 0.3), 0, Math.PI * 2);
+      bctx.fillStyle = `rgba(238, 225, 255, ${Math.min(1, (e.baseAlpha * flicker + 0.15) * brightBoost)})`;
+      bctx.fill();
+      bctx.restore();
+    });
+
+    // flow embers riding along roots and branches, spiritual -> physical
+    flowEmbers.forEach((fe) => {
+      const owner = fe.growthSpeedOwner;
+      const reveal = clamp01(progress * owner.growthSpeed * 1.15);
+      if (progress < fe.appearAt || reveal < 0.05) return;
+      if (!reducedMotion) {
+        fe.t += fe.speed * activity * 16;
+        if (fe.t > reveal) fe.t = 0;
+      } else {
+        fe.t = Math.min(fe.t, reveal);
+      }
+      const p = pointAt(fe.path, Math.min(fe.t, reveal), null, time);
+      const alpha = Math.min(1, 0.85 * (1 - fe.t * 0.35) * (1 + tapPct * 0.6));
+      bctx.save();
+      bctx.shadowColor = 'rgba(200, 220, 255, 0.95)';
+      bctx.shadowBlur = 10 + tapPct * 8;
+      bctx.beginPath();
+      bctx.arc(p.x * W, p.y * H, fe.size * (1 + tapPct * 0.25), 0, Math.PI * 2);
+      bctx.fillStyle = `rgba(255, 250, 245, ${alpha})`;
+      bctx.fill();
+      bctx.restore();
+    });
+  }
+
+  function tick(time) {
+    progress += (targetProgress - progress) * 0.05;
+    renderScene(time);
+    requestAnimationFrame(tick);
+  }
+
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  if (reducedMotion) {
+    renderScene(0);
+  } else {
+    requestAnimationFrame(tick);
+  }
+
+  function showToast() {
+    toastEl.classList.add('show');
+    setTimeout(() => toastEl.classList.remove('show'), 2200);
+  }
+
+  function playAlertSound() {
+    try {
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      [0, 0.15, 0.3].forEach((delay) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0, now + delay);
+        gain.gain.linearRampToValueAtTime(0.3, now + delay + 0.02);
+        gain.gain.linearRampToValueAtTime(0, now + delay + 0.13);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now + delay);
+        osc.stop(now + delay + 0.15);
+      });
+    } catch (e) {}
+  }
+
+  function playTapSound() {
+    try {
+      const ctx = getAudioCtx();
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(600, now);
+      osc.frequency.exponentialRampToValueAtTime(300, now + 0.06);
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.06);
+    } catch (e) {}
+  }
+
+  function increment() {
+    count++;
+    updateDisplay();
+    playTapSound();
+    if (count === 100) {
+      playAlertSound();
+      showToast();
+    }
+  }
+
+  function reset() {
+    count = 0;
+    updateDisplay();
+  }
+
+  app.addEventListener('click', increment);
+
+  resetBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    reset();
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'r' || e.key === 'R') {
+      reset();
+    }
+  });
+
+  function requestFullscreen() {
+    const el = document.documentElement;
+    if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+  }
+
+  window.addEventListener('load', () => {
+    requestFullscreen();
+  });
+
+  document.addEventListener('click', function once() {
+    if (!document.fullscreenElement) requestFullscreen();
+  }, { once: false });
+</script>
+</body>
+</html>
