@@ -1437,42 +1437,55 @@
     const scale = isTemple ? 1.25 : 0.85;
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x2a2436, roughness: 0.85, metalness: 0.1 });
     const pillarHeight = 78 * scale;
+    const u = isTemple ? 0 : 1;
+    const halfWidth = pathHalfWidth(u); // doorway spacing matches the river's actual width here
+    const doorHalf = halfWidth * 0.85;
 
     const pillarL = makeStonePillar(stoneMat, pillarHeight);
-    pillarL.position.x = -34 * scale;
+    pillarL.position.x = -doorHalf;
     pillarL.scale.setScalar(scale);
     const pillarR = makeStonePillar(stoneMat, pillarHeight);
-    pillarR.position.x = 34 * scale;
+    pillarR.position.x = doorHalf;
     pillarR.scale.setScalar(scale);
     group.add(pillarL, pillarR);
 
     // a layered, flat-topped entablature reads as classical temple stonework
-    const pediment = new THREE.Mesh(new THREE.BoxGeometry(84 * scale, 10 * scale, 22 * scale), stoneMat);
+    const spanW = doorHalf * 2 + 16 * scale;
+    const pediment = new THREE.Mesh(new THREE.BoxGeometry(spanW, 10 * scale, 22 * scale), stoneMat);
     pediment.position.y = pillarHeight + 17 * scale;
-    const pedimentCap = new THREE.Mesh(new THREE.BoxGeometry(70 * scale, 8 * scale, 18 * scale), stoneMat);
+    const pedimentCap = new THREE.Mesh(new THREE.BoxGeometry(spanW * 0.83, 8 * scale, 18 * scale), stoneMat);
     pedimentCap.position.y = pillarHeight + 26 * scale;
     group.add(pediment, pedimentCap);
+
+    // a stone platform/threshold so the gate visually stands on solid ground and
+    // meets the water at its feet, instead of floating disconnected from both
+    const platform = new THREE.Mesh(new THREE.BoxGeometry(spanW + 20 * scale, 4, halfWidth * 2 + 24 * scale), stoneMat);
+    platform.position.y = -2;
+    group.add(platform);
 
     let portal = null;
     if (isTemple) {
       const trimMat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.1, metalness: 0.5, roughness: 0.3 });
-      const trimTop = new THREE.Mesh(new THREE.BoxGeometry(70 * scale, 3 * scale, 3 * scale), trimMat);
+      const trimTop = new THREE.Mesh(new THREE.BoxGeometry(doorHalf * 2 + 8 * scale, 3 * scale, 3 * scale), trimMat);
       trimTop.position.y = pillarHeight + 10 * scale;
       group.add(trimTop);
 
       // the doorway itself glows like a divine light is pouring through it
       portal = new THREE.Mesh(
-        new THREE.PlaneGeometry(62 * scale, pillarHeight + 4 * scale),
+        new THREE.PlaneGeometry(doorHalf * 2, pillarHeight + 4 * scale),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
       );
       portal.position.y = (pillarHeight + 10 * scale) / 2 + 2;
       group.add(portal);
     }
 
-    // sit right at the water's mouth, raised onto the bank height rather than at
-    // water level, so the base reads as standing on ground, not floating on the river
-    const p0 = pathXZ(isTemple ? 0 : 1);
-    group.position.set(p0.x, 1.5, p0.z);
+    // face the gate along the river's own direction at this point, so its doorway
+    // opens directly onto the water instead of standing sideways to it
+    const p0 = pathXZ(u);
+    const uAhead = isTemple ? u + 0.02 : u - 0.02;
+    const pAhead = pathXZ(uAhead);
+    group.position.set(p0.x, 1, p0.z);
+    group.lookAt(pAhead.x, 1, pAhead.z);
     return { group, portal };
   }
   const spiritGate = makeTempleGate(0xffd28a, true);
