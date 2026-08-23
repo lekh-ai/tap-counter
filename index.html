@@ -725,7 +725,7 @@
     <path d="M16 8a5 5 0 0 1 0 8"/>
     <path d="M18.5 5.5a9 9 0 0 1 0 13"/>
   </svg>
-  <input type="range" id="volume-slider" min="0" max="100" value="70" aria-label="Effect volume">
+  <input type="range" id="volume-slider" min="0" max="200" value="70" aria-label="Effect volume">
 </div>
 
 <script>
@@ -776,7 +776,7 @@
   let effectVolume = 0.7;
   try {
     const savedVol = parseInt(localStorage.getItem(VOLUME_KEY), 10);
-    if (Number.isFinite(savedVol) && savedVol >= 0 && savedVol <= 100) effectVolume = savedVol / 100;
+    if (Number.isFinite(savedVol) && savedVol >= 0 && savedVol <= 200) effectVolume = savedVol / 100;
   } catch (e) {}
   volumeSlider.value = Math.round(effectVolume * 100);
 
@@ -1315,7 +1315,7 @@
         osc.type = 'sine';
         osc.frequency.value = 880;
         gain.gain.setValueAtTime(0, now + delay);
-        gain.gain.linearRampToValueAtTime(0.3, now + delay + 0.02);
+        gain.gain.linearRampToValueAtTime(0.7, now + delay + 0.02);
         gain.gain.linearRampToValueAtTime(0, now + delay + 0.13);
         osc.connect(gain);
         gain.connect(masterGain);
@@ -1334,7 +1334,7 @@
       osc.type = 'sine';
       osc.frequency.setValueAtTime(600, now);
       osc.frequency.exponentialRampToValueAtTime(300, now + 0.06);
-      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.setValueAtTime(0.55, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
       osc.connect(gain);
       gain.connect(masterGain);
