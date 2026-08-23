@@ -1149,7 +1149,7 @@
   const RANGE = 260;
   function pathXZ(u) {
     const x = -RANGE + u * RANGE * 2;
-    const z = Math.sin(u * Math.PI * 1.6 + 0.3) * 130 + Math.sin(u * Math.PI * 0.7) * 55 - u * 160;
+    const z = Math.sin(u * Math.PI * 1.6 + 0.3) * 95 + Math.sin(u * Math.PI * 0.7) * 40 - u * 160;
     return { x, z };
   }
   function pathHalfWidth(u) {
@@ -1197,7 +1197,7 @@
   // floating over a hard-edged void, and so the water has something to reflect
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(3000, 3000, 1, 1), rockMat);
   ground.rotation.x = -Math.PI / 2;
-  ground.position.y = -4;
+  ground.position.y = -12; // well below the bank's inner edge (-3) to avoid z-fighting
   scene.add(ground);
 
   // real riverbank geometry that physically rises out of the water on both sides,
@@ -1219,8 +1219,8 @@
       tx /= tl; tz /= tl;
       const px = -tz, pz = tx;
       const bankRise = 5 + Math.sin(c.u * 9 + side) * 2.2 + Math.sin(c.u * 3.3) * 1.6;
-      const innerR = c.hw - 3; // tuck slightly under the water edge so there's no visible seam
-      const outerR = c.hw + 90;
+      const innerR = c.hw - 1; // tuck slightly under the water edge so there's no visible seam
+      const outerR = c.hw + 45; // kept narrow relative to curvature so the ribbon can't fold over itself at bends
       positions.push(c.x + px * side * innerR, -3, c.z + pz * side * innerR);
       positions.push(c.x + px * side * outerR, bankRise, c.z + pz * side * outerR);
       normals.push(0, 1, 0, 0, 1, 0);
