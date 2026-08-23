@@ -140,6 +140,43 @@
     transform: translateY(0);
   }
 
+  #scene-toggle {
+    position: fixed;
+    top: 24px;
+    left: 24px;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    z-index: 10;
+  }
+
+  #scene-toggle button {
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.5);
+    background: transparent;
+    border: none;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  #scene-toggle button.active {
+    color: #fff;
+    background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  }
+
+  #scene-toggle button:not(.active):hover {
+    color: rgba(255,255,255,0.8);
+    background: rgba(255,255,255,0.08);
+  }
+
   #volume {
     position: fixed;
     top: 24px;
@@ -387,6 +424,10 @@
 </div>
 
 <div id="toast">🎉 100 taps reached!</div>
+<div id="scene-toggle">
+  <button type="button" data-scene="branches">Branches</button>
+  <button type="button" data-scene="river">River</button>
+</div>
 <button id="reset">Reset <kbd>R</kbd></button>
 <div id="volume">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -554,11 +595,18 @@
   function lerp(a, b, t) { return a + (b - a) * t; }
   function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
-  // ---- Scene 2: river flowing from the temple doors, golden pebbles, embers ----
+  // ---- Scene toggle: "branches" (root network) vs "river" (temple river) ----
+  const SCENE_KEY = 'god-challenge-scene';
+  let currentScene = 'branches';
+  try {
+    const savedScene = localStorage.getItem(SCENE_KEY);
+    if (savedScene === 'branches' || savedScene === 'river') currentScene = savedScene;
+  } catch (e) {}
+
   const spiritColor = [124, 58, 237];
   const physColor = [6, 182, 212];
   const goldColor = [255, 200, 90];
-  function riverColorAt(t, alpha) {
+  function gradientColorAt(t, alpha) {
     const c = t < 0.6
       ? spiritColor
       : [
@@ -568,7 +616,310 @@
         ];
     return `rgba(${c[0] | 0}, ${c[1] | 0}, ${c[2] | 0}, ${alpha})`;
   }
+  const rootColorAt = gradientColorAt;
+  const riverColorAt = gradientColorAt;
 
+  // ---- Scene: branches (root network with leaves) ----
+  // wave constants — each depth has its own frequency, but a child always inherits
+  // its parent's live offset at the exact attachment point so joins never separate.
+  const TRUNK_FREQ = 0.0005, BRANCH_FREQ = 0.0011, CHILD_FREQ = 0.0014;
+  const TRUNK_WAVE_AMP = 0.006, BRANCH_WAVE_AMP = 0.014, CHILD_WAVE_AMP = 0.018;
+
+  // build a jagged organic polyline of normalized points (x,y in 0..1)
+  function buildPolyline(x0, y0, x1, y1, segments, wobble) {
+    const pts = [{ x: x0, y: y0 }];
+    for (let i = 1; i < segments; i++) {
+      const t = i / segments;
+      const bow = Math.sin(t * Math.PI) * wobble * 0.6;
+      pts.push({
+        x: lerp(x0, x1, t),
+        y: lerp(y0, y1, t) + (Math.random() - 0.5) * wobble + bow * (Math.random() - 0.5),
+      });
+    }
+    pts.push({ x: x1, y: y1 });
+    return pts;
+  }
+
+  function makeBranch(parentPts, depth, opts) {
+    opts = opts || {};
+    const idxMax = opts.idxMax || (parentPts.length - 2);
+    const idx = 1 + Math.floor(Math.random() * Math.max(1, Math.min(idxMax, parentPts.length - 2)));
+    const parentT = idx / (parentPts.length - 1);
+    const start = parentPts[idx];
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    const spanX = rand(0.06, 0.16) * (depth === 1 ? 1 : 0.6);
+    const spanY = dir * rand(0.03, 0.09);
+    const endX = Math.min(0.94, start.x + spanX);
+    const endY = clamp01(start.y + spanY);
+    const pts = buildPolyline(start.x, start.y, endX, endY, 4, 0.02);
+    const branch = {
+      pts,
+      parentT,
+      phase: rand(0, Math.PI * 2),
+      appearAt: opts.appearMax != null ? rand(0, opts.appearMax) : rand(0.02, depth === 1 ? 0.55 : 0.75),
+      growthSpeed: rand(0.8, 1.4),
+      baseWidth: depth === 1 ? rand(1.1, 1.9) : rand(0.5, 0.9),
+      alpha: depth === 1 ? rand(0.55, 0.8) : rand(0.35, 0.55),
+      hasLeaf: Math.random() < 0.92,
+      children: [],
+    };
+    if (depth === 1 && Math.random() < 0.8) {
+      branch.children.push(makeBranch(pts, 2));
+      if (Math.random() < 0.4) branch.children.push(makeBranch(pts, 2));
+    }
+    return branch;
+  }
+
+  function buildTrunks(count) {
+    const trunks = [];
+    for (let i = 0; i < count; i++) {
+      const y = 0.1 + (i * (0.8 / (count - 1))) + rand(-0.02, 0.02);
+      const endY = clamp01(y + rand(-0.05, 0.05));
+      const pts = buildPolyline(0, y, 0.9, endY, 12, 0.035);
+      const trunk = {
+        pts,
+        growthSpeed: rand(0.85, 1.2),
+        baseWidth: rand(2.6, 4.2),
+        tipWidth: rand(0.35, 0.6),
+        phase: rand(0, Math.PI * 2),
+        branches: [],
+      };
+      const branchCount = 4 + Math.floor(Math.random() * 4);
+      for (let b = 0; b < branchCount; b++) trunk.branches.push(makeBranch(pts, 1));
+
+      // extra branches clustered near the spiritual origin, visible from the start,
+      // so the root network reads noticeably denser on that side by default
+      const denseCount = 5 + Math.floor(Math.random() * 3);
+      const idxMax = Math.max(2, Math.floor((pts.length - 2) * 0.35));
+      for (let d = 0; d < denseCount; d++) {
+        trunk.branches.push(makeBranch(pts, 1, { idxMax, appearMax: 0.08 }));
+      }
+
+      trunks.push(trunk);
+    }
+    return trunks;
+  }
+
+  const trunks = buildTrunks(6);
+
+  function trunkWaveAt(trunk, t, time) {
+    return TRUNK_WAVE_AMP * t * Math.sin(time * TRUNK_FREQ + trunk.phase);
+  }
+  function branchWaveAt(trunk, branch, s, time) {
+    return trunkWaveAt(trunk, branch.parentT, time) + BRANCH_WAVE_AMP * s * Math.sin(time * BRANCH_FREQ + branch.phase);
+  }
+  function childWaveAt(trunk, branch, child, u, time) {
+    return branchWaveAt(trunk, branch, child.parentT, time) + CHILD_WAVE_AMP * u * Math.sin(time * CHILD_FREQ + child.phase);
+  }
+
+  // point along a polyline at normalized reveal fraction t (0..1); waveFn(t, time) supplies extra y-offset
+  function pointAt(pts, t, waveFn, time) {
+    const total = pts.length - 1;
+    const f = clamp01(t) * total;
+    const i = Math.min(Math.floor(f), total - 1);
+    const local = f - i;
+    const a = pts[i], b = pts[Math.min(i + 1, total)];
+    const x = lerp(a.x, b.x, local);
+    let y = lerp(a.y, b.y, local);
+    if (waveFn && !reducedMotion) y += waveFn(t, time);
+    return { x, y };
+  }
+
+  function strokeGrowingLine(pts, reveal, widthStart, widthEnd, alpha, time, waveFn, colorStops) {
+    if (reveal <= 0) return null;
+    const steps = Math.max(2, Math.round((pts.length - 1) * clamp01(reveal)) + 1);
+    let prev = pointAt(pts, 0, waveFn, time);
+    let tip = prev;
+    for (let s = 1; s <= steps; s++) {
+      const localT = Math.min(1, s / (pts.length - 1));
+      const revealT = Math.min(localT, reveal);
+      const cur = pointAt(pts, revealT, waveFn, time);
+      const segT = revealT;
+      const w = lerp(widthStart, widthEnd, segT);
+      bctx.beginPath();
+      bctx.moveTo(prev.x * W, prev.y * H);
+      bctx.lineTo(cur.x * W, cur.y * H);
+      bctx.lineWidth = w;
+      bctx.strokeStyle = colorStops(segT, alpha);
+      bctx.stroke();
+      tip = cur;
+      prev = cur;
+      if (revealT >= reveal) break;
+    }
+    return tip;
+  }
+
+  function drawLeaf(p, angle, size, color, alpha) {
+    bctx.save();
+    bctx.translate(p.x * W, p.y * H);
+    bctx.rotate(angle);
+    bctx.globalAlpha = alpha;
+
+    // stem — drawn back along the branch's own direction so the leaf
+    // always reads as attached, even when the branch stroke itself is thin/faint
+    bctx.beginPath();
+    bctx.moveTo(-size * 0.9, 0);
+    bctx.lineTo(0, 0);
+    bctx.strokeStyle = color;
+    bctx.lineWidth = Math.max(1, size * 0.16);
+    bctx.lineCap = 'round';
+    bctx.stroke();
+
+    bctx.shadowColor = color;
+    bctx.shadowBlur = size * 0.6;
+    bctx.beginPath();
+    bctx.moveTo(0, 0);
+    bctx.quadraticCurveTo(size * 0.55, -size * 0.55, size * 1.4, 0);
+    bctx.quadraticCurveTo(size * 0.55, size * 0.55, 0, 0);
+    bctx.fillStyle = color;
+    bctx.fill();
+    bctx.shadowBlur = 0;
+    bctx.beginPath();
+    bctx.moveTo(0, 0);
+    bctx.lineTo(size * 1.3, 0);
+    bctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    bctx.lineWidth = Math.max(0.6, size * 0.08);
+    bctx.stroke();
+    bctx.restore();
+  }
+
+  // ember particles: ambient drifters + a few that ride along trunks toward the physical side
+  const BR_EMBER_BASE = 26;
+  const BR_EMBER_MAX_EXTRA = 20;
+  const brEmbers = [];
+  for (let i = 0; i < BR_EMBER_BASE + BR_EMBER_MAX_EXTRA; i++) {
+    brEmbers.push({
+      x: Math.random(), y: Math.random(),
+      vx: rand(0.00006, 0.00016),
+      vy: rand(-0.00004, 0.00004),
+      size: rand(0.8, 2.2),
+      baseAlpha: rand(0.15, 0.4),
+      phase: rand(0, Math.PI * 2),
+    });
+  }
+  function makeFlowEmber(path, growthSpeedOwner, appearAt) {
+    return {
+      path,
+      appearAt: appearAt || 0,
+      growthSpeedOwner,
+      t: Math.random(),
+      speed: rand(0.00009, 0.0002),
+      size: rand(1.4, 2.4),
+    };
+  }
+
+  const brFlowEmbers = [];
+  trunks.forEach((trunk) => {
+    brFlowEmbers.push(makeFlowEmber(trunk.pts, trunk, 0));
+    trunk.branches.forEach((branch) => {
+      brFlowEmbers.push(makeFlowEmber(branch.pts, trunk, branch.appearAt));
+      branch.children.forEach((child) => {
+        brFlowEmbers.push(makeFlowEmber(child.pts, trunk, child.appearAt));
+      });
+    });
+  });
+
+  function renderBranches(time) {
+    // roots
+    trunks.forEach((trunk) => {
+      const reveal = clamp01(progress * trunk.growthSpeed * 1.15);
+      if (reveal <= 0) return;
+      const widthScale = 0.35 + 0.65 * progress;
+      strokeGrowingLine(
+        trunk.pts, reveal,
+        trunk.baseWidth * widthScale, trunk.tipWidth * widthScale,
+        0.8, time, (t, tm) => trunkWaveAt(trunk, t, tm),
+        (t, a) => rootColorAt(t, a * (1 - t * 0.5))
+      );
+
+      trunk.branches.forEach((branch) => {
+        if (progress < branch.appearAt) return;
+        const bReveal = clamp01(((progress - branch.appearAt) / Math.max(0.01, 1 - branch.appearAt)) * branch.growthSpeed * 1.3);
+        if (bReveal <= 0) return;
+        strokeGrowingLine(
+          branch.pts, bReveal,
+          branch.baseWidth * widthScale, branch.baseWidth * widthScale * 0.15,
+          branch.alpha, time, (s, tm) => branchWaveAt(trunk, branch, s, tm),
+          (t, a) => rootColorAt(branch.pts[0].x + t * 0.1, a * (1 - bReveal * 0.3) * (1 - t))
+        );
+        if (branch.hasLeaf && bReveal > 0.55) {
+          const last = branch.pts[branch.pts.length - 1];
+          const prevPt = branch.pts[branch.pts.length - 2];
+          const angle = Math.atan2((last.y - prevPt.y) * H, (last.x - prevPt.x) * W);
+          const tipPt = pointAt(branch.pts, bReveal, (s, tm) => branchWaveAt(trunk, branch, s, tm), time);
+          const leafSize = (6 + branch.baseWidth * 2.2) * Math.max(widthScale, 0.7);
+          const leafAlpha = Math.min(1, (bReveal - 0.55) / 0.3) * Math.max(branch.alpha, 0.75);
+          drawLeaf(tipPt, angle, leafSize, rootColorAt(branch.pts[0].x + 0.05, 1), leafAlpha);
+        }
+        branch.children.forEach((child) => {
+          if (progress < child.appearAt) return;
+          const cReveal = clamp01(((progress - child.appearAt) / Math.max(0.01, 1 - child.appearAt)) * child.growthSpeed * 1.3);
+          if (cReveal <= 0) return;
+          strokeGrowingLine(
+            child.pts, cReveal,
+            child.baseWidth * widthScale, child.baseWidth * widthScale * 0.1,
+            child.alpha, time, (u, tm) => childWaveAt(trunk, branch, child, u, tm),
+            (t, a) => rootColorAt(child.pts[0].x + t * 0.1, a * (1 - t))
+          );
+          if (child.hasLeaf && cReveal > 0.55) {
+            const last = child.pts[child.pts.length - 1];
+            const prevPt = child.pts[child.pts.length - 2];
+            const angle = Math.atan2((last.y - prevPt.y) * H, (last.x - prevPt.x) * W);
+            const tipPt = pointAt(child.pts, cReveal, (u, tm) => childWaveAt(trunk, branch, child, u, tm), time);
+            const leafSize = (4.5 + child.baseWidth * 2) * Math.max(widthScale, 0.7);
+            const leafAlpha = Math.min(1, (cReveal - 0.55) / 0.3) * Math.max(child.alpha, 0.7);
+            drawLeaf(tipPt, angle, leafSize, rootColorAt(child.pts[0].x + 0.05, 1), leafAlpha);
+          }
+        });
+      });
+    });
+
+    // ambient embers — count and brightness both grow subtly with tap count
+    const activity = 1 + progress * 0.6;
+    const activeEmberCount = Math.min(brEmbers.length, BR_EMBER_BASE + Math.round(tapPct * BR_EMBER_MAX_EXTRA));
+    const brightBoost = 1 + tapPct * 0.9;
+    brEmbers.slice(0, activeEmberCount).forEach((e) => {
+      if (!reducedMotion) {
+        e.x += e.vx * activity * 16;
+        e.y += e.vy * activity * 16 + Math.sin(time * 0.0004 + e.phase) * 0.00002;
+        if (e.x > 1.05) { e.x = -0.05; e.y = Math.random(); }
+      }
+      const flicker = reducedMotion ? 1 : 0.7 + 0.3 * Math.sin(time * 0.0015 + e.phase);
+      bctx.save();
+      bctx.shadowColor = 'rgba(196, 181, 253, 0.9)';
+      bctx.shadowBlur = 8 + tapPct * 6;
+      bctx.beginPath();
+      bctx.arc(e.x * W, e.y * H, e.size * (1 + tapPct * 0.3), 0, Math.PI * 2);
+      bctx.fillStyle = `rgba(238, 225, 255, ${Math.min(1, (e.baseAlpha * flicker + 0.15) * brightBoost)})`;
+      bctx.fill();
+      bctx.restore();
+    });
+
+    // flow embers riding along roots and branches, spiritual -> physical
+    brFlowEmbers.forEach((fe) => {
+      const owner = fe.growthSpeedOwner;
+      const reveal = clamp01(progress * owner.growthSpeed * 1.15);
+      if (progress < fe.appearAt || reveal < 0.05) return;
+      if (!reducedMotion) {
+        fe.t += fe.speed * activity * 16;
+        if (fe.t > reveal) fe.t = 0;
+      } else {
+        fe.t = Math.min(fe.t, reveal);
+      }
+      const p = pointAt(fe.path, Math.min(fe.t, reveal), null, time);
+      const alpha = Math.min(1, 0.85 * (1 - fe.t * 0.35) * (1 + tapPct * 0.6));
+      bctx.save();
+      bctx.shadowColor = 'rgba(200, 220, 255, 0.95)';
+      bctx.shadowBlur = 10 + tapPct * 8;
+      bctx.beginPath();
+      bctx.arc(p.x * W, p.y * H, fe.size * (1 + tapPct * 0.25), 0, Math.PI * 2);
+      bctx.fillStyle = `rgba(255, 250, 245, ${alpha})`;
+      bctx.fill();
+      bctx.restore();
+    });
+  }
+
+  // ---- Scene: river flowing from the temple doors, golden pebbles, embers ----
   const RIVER_Y0 = 0.54;
   function riverCenterY(x, time) {
     return RIVER_Y0
@@ -582,10 +933,10 @@
 
   // golden pebbles resting in the riverbed, denser near the temple (spiritual origin)
   // and revealing progressively further out as the river grows
-  const PEBBLE_BASE = 20;
-  const PEBBLE_MAX_EXTRA = 26;
+  const RV_PEBBLE_BASE = 20;
+  const RV_PEBBLE_MAX_EXTRA = 26;
   const pebbles = [];
-  for (let i = 0; i < PEBBLE_BASE + PEBBLE_MAX_EXTRA; i++) {
+  for (let i = 0; i < RV_PEBBLE_BASE + RV_PEBBLE_MAX_EXTRA; i++) {
     pebbles.push({
       x: rand(0.02, 0.92),
       offsetFrac: rand(-0.8, 0.8),
@@ -597,11 +948,11 @@
   pebbles.sort((a, b) => a.x - b.x);
 
   // embers: ambient drifters + a few riding the current from temple to the far bank
-  const EMBER_BASE = 24;
-  const EMBER_MAX_EXTRA = 18;
-  const embers = [];
-  for (let i = 0; i < EMBER_BASE + EMBER_MAX_EXTRA; i++) {
-    embers.push({
+  const RV_EMBER_BASE = 24;
+  const RV_EMBER_MAX_EXTRA = 18;
+  const rvEmbers = [];
+  for (let i = 0; i < RV_EMBER_BASE + RV_EMBER_MAX_EXTRA; i++) {
+    rvEmbers.push({
       x: Math.random(), y: Math.random(),
       vx: rand(0.00006, 0.00016),
       vy: rand(-0.00004, 0.00004),
@@ -610,9 +961,9 @@
       phase: rand(0, Math.PI * 2),
     });
   }
-  const flowEmbers = [];
+  const rvFlowEmbers = [];
   for (let i = 0; i < 22; i++) {
-    flowEmbers.push({
+    rvFlowEmbers.push({
       t: Math.random(),
       speed: rand(0.00008, 0.00019),
       size: rand(1.3, 2.5),
@@ -620,7 +971,7 @@
     });
   }
 
-  const BASE_GROWTH = 0.82; // river starts mostly formed; taps add subtle refinement
+  const BASE_GROWTH = 0.82; // scenes start mostly established; taps add subtle refinement
   let progress = BASE_GROWTH;
   let targetProgress = BASE_GROWTH;
   let tapPct = 0; // raw count/100, drives density + brightness
@@ -682,9 +1033,7 @@
     bctx.restore();
   }
 
-  function renderScene(time) {
-    bctx.clearRect(0, 0, W, H);
-
+  function renderRiver(time) {
     const growth = progress; // 0.82..1, subtle refinement driven by taps
     const revealX = Math.min(0.94, growth * 1.02);
 
@@ -731,7 +1080,7 @@
     bctx.restore();
 
     // golden pebbles glowing in the riverbed, revealed progressively from the temple outward
-    const activePebbles = Math.min(pebbles.length, PEBBLE_BASE + Math.round(tapPct * PEBBLE_MAX_EXTRA));
+    const activePebbles = Math.min(pebbles.length, RV_PEBBLE_BASE + Math.round(tapPct * RV_PEBBLE_MAX_EXTRA));
     for (let i = 0; i < activePebbles; i++) {
       const pb = pebbles[i];
       if (pb.x > revealX) continue;
@@ -749,9 +1098,9 @@
 
     // ambient embers drifting between the realms
     const activity = 1 + progress * 0.6;
-    const activeEmberCount = Math.min(embers.length, EMBER_BASE + Math.round(tapPct * EMBER_MAX_EXTRA));
+    const activeEmberCount = Math.min(rvEmbers.length, RV_EMBER_BASE + Math.round(tapPct * RV_EMBER_MAX_EXTRA));
     const brightBoost = 1 + tapPct * 0.9;
-    embers.slice(0, activeEmberCount).forEach((e) => {
+    rvEmbers.slice(0, activeEmberCount).forEach((e) => {
       if (!reducedMotion) {
         e.x += e.vx * activity * 16;
         e.y += e.vy * activity * 16 + Math.sin(time * 0.0004 + e.phase) * 0.00002;
@@ -769,7 +1118,7 @@
     });
 
     // embers riding the current from the temple doors out toward the physical bank
-    flowEmbers.forEach((fe) => {
+    rvFlowEmbers.forEach((fe) => {
       if (revealX < 0.05) return;
       if (!reducedMotion) {
         fe.t += fe.speed * activity * 16;
@@ -789,6 +1138,22 @@
       bctx.fill();
       bctx.restore();
     });
+  }
+
+  function renderScene(time) {
+    bctx.clearRect(0, 0, W, H);
+    if (currentScene === 'river') renderRiver(time);
+    else renderBranches(time);
+  }
+
+  function setScene(scene) {
+    if (scene !== 'branches' && scene !== 'river') return;
+    currentScene = scene;
+    try { localStorage.setItem(SCENE_KEY, scene); } catch (e) {}
+    document.querySelectorAll('#scene-toggle button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.scene === scene);
+    });
+    renderScene(0);
   }
 
   function tick(time) {
@@ -870,6 +1235,14 @@
   progressEl.style.strokeDashoffset = CIRC * (1 - Math.min(count / 100, 1));
   setRootProgress(Math.min(count / 100, 1));
   updatePhase();
+
+  document.querySelectorAll('#scene-toggle button').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.scene === currentScene);
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setScene(btn.dataset.scene);
+    });
+  });
 
   app.addEventListener('click', increment);
 
