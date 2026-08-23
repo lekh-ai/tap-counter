@@ -1789,11 +1789,19 @@
     const expected = expectedWords();
     if (!expected.length) return;
 
+    // "Ameen Ameen" / "Amen Amen" hard-confirms the tap on its own, regardless of
+    // how much of the verse has been heard so far — glow the whole verse and count it
+    if (hasAmeenAmeen(spokenWords)) {
+      matchedCount = expected.length;
+      applyAffirmProgress();
+      commitAffirmation();
+      return;
+    }
+
     // the whole verse was already spoken once — the only thing left is hearing
-    // the last word again as a deliberate confirmation before it counts (saying
-    // "Ameen Ameen" / "Amen Amen" back to back also confirms it)
+    // the last word again as a deliberate confirmation before it counts
     if (pendingConfirm) {
-      if (spokenWords.includes(expected[expected.length - 1]) || hasAmeenAmeen(spokenWords)) commitAffirmation();
+      if (spokenWords.includes(expected[expected.length - 1])) commitAffirmation();
       return;
     }
 
@@ -1818,9 +1826,8 @@
     applyAffirmProgress();
     if (matchedCount >= expected.length) {
       enterPendingConfirm();
-      // the repeat (or "Ameen Ameen") may already be sitting right there in this same batch
-      const rest = spokenWords.slice(si);
-      if (rest.includes(expected[expected.length - 1]) || hasAmeenAmeen(rest)) commitAffirmation();
+      // the repeat may already be sitting right there in this same batch of words
+      if (spokenWords.slice(si).includes(expected[expected.length - 1])) commitAffirmation();
     }
   }
 
