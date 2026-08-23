@@ -316,11 +316,24 @@
     line-height: 1.45;
     color: rgba(255,255,255,0.92);
     font-style: italic;
-    white-space: pre-line;
   }
 
-  #verse-text::before { content: open-quote; }
-  #verse-text::after { content: close-quote; }
+  .verse-list {
+    margin: 0;
+    padding-left: 1.2em;
+    list-style: none;
+  }
+  .verse-list li {
+    position: relative;
+    margin: 4px 0;
+  }
+  .verse-list li::before {
+    content: '•';
+    position: absolute;
+    left: -1.1em;
+    color: rgba(196, 181, 253, 0.85);
+    font-style: normal;
+  }
 
   #verse-ref {
     margin-top: 16px;
@@ -600,6 +613,26 @@
     box-shadow: 0 0 6px rgba(196, 181, 253, 0.9);
     cursor: pointer;
   }
+  #river-debug input[type="color"] {
+    width: 100%;
+    height: 30px;
+    padding: 2px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  #river-debug select {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #fff;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    cursor: pointer;
+  }
   #river-debug .hint {
     margin-top: 14px;
     font-size: 11px;
@@ -658,6 +691,18 @@
   <div id="verse-ctrl-group">
     <label><span>Verse box opacity</span><span id="dbg-verse-opacity-val">55%</span></label>
     <input type="range" id="dbg-verse-opacity" min="0" max="100" step="5" value="55">
+    <label><span>Verse font size</span><span id="dbg-verse-size-val">20px</span></label>
+    <input type="range" id="dbg-verse-size" min="12" max="40" step="1" value="20">
+    <label><span>Verse font color</span><span></span></label>
+    <input type="color" id="dbg-verse-color" value="#ebe6ff">
+    <label style="margin-top:12px;"><span>Verse font</span><span></span></label>
+    <select id="dbg-verse-font">
+      <option value="inherit">Default</option>
+      <option value="Georgia, 'Times New Roman', serif">Serif</option>
+      <option value="'Courier New', monospace">Monospace</option>
+      <option value="'Brush Script MT', cursive">Cursive</option>
+      <option value="'Trebuchet MS', sans-serif">Rounded</option>
+    </select>
   </div>
   <div id="river-ctrl-group">
     <label><span>Gold count</span><span id="dbg-count-val">72</span></label>
@@ -1453,13 +1498,92 @@
     });
   }
 
+  // verse font settings — size, color, family — all live + persisted
+  const VERSE_FONT_KEY = 'god-challenge-verse-font';
+  const dbgVerseSize = document.getElementById('dbg-verse-size');
+  const dbgVerseSizeVal = document.getElementById('dbg-verse-size-val');
+  const dbgVerseColor = document.getElementById('dbg-verse-color');
+  const dbgVerseFont = document.getElementById('dbg-verse-font');
+  let verseFont = { size: 20, color: '#ebe6ff', family: 'inherit' };
+  try {
+    const savedFont = JSON.parse(localStorage.getItem(VERSE_FONT_KEY) || 'null');
+    if (savedFont) verseFont = Object.assign(verseFont, savedFont);
+  } catch (e) {}
+
+  function applyVerseFont() {
+    verseTextEl.style.fontSize = verseFont.size + 'px';
+    verseTextEl.style.color = verseFont.color;
+    verseTextEl.style.fontFamily = verseFont.family;
+    if (dbgVerseSizeVal) dbgVerseSizeVal.textContent = verseFont.size + 'px';
+    if (dbgVerseSize) dbgVerseSize.value = verseFont.size;
+    if (dbgVerseColor) dbgVerseColor.value = verseFont.color;
+    if (dbgVerseFont) dbgVerseFont.value = verseFont.family;
+  }
+  applyVerseFont();
+
+  function saveVerseFont() {
+    try { localStorage.setItem(VERSE_FONT_KEY, JSON.stringify(verseFont)); } catch (e) {}
+  }
+  if (dbgVerseSize) {
+    dbgVerseSize.addEventListener('input', (e) => {
+      e.stopPropagation();
+      verseFont.size = parseInt(dbgVerseSize.value, 10);
+      applyVerseFont();
+      saveVerseFont();
+    });
+    dbgVerseColor.addEventListener('input', (e) => {
+      e.stopPropagation();
+      verseFont.color = dbgVerseColor.value;
+      applyVerseFont();
+      saveVerseFont();
+    });
+    dbgVerseFont.addEventListener('change', (e) => {
+      e.stopPropagation();
+      verseFont.family = dbgVerseFont.value;
+      applyVerseFont();
+      saveVerseFont();
+    });
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // lines starting with "-" render as bullet points; everything else stays a plain line
+  function renderVerseLines(text) {
+    const records = text.split('\n').map((line) => {
+      const trimmed = line.trim();
+      const isBullet = /^-\s+/.test(trimmed) || trimmed === '-';
+      return { isBullet, text: isBullet ? trimmed.replace(/^-\s*/, '') : line };
+    });
+    // attach the quote marks to the actual first/last line of text, rather than
+    // as CSS-generated content — those sit oddly alone when content is multi-block
+    if (records.length) {
+      records[0].text = '“' + records[0].text;
+      records[records.length - 1].text += '”';
+    }
+    let html = '';
+    let inList = false;
+    records.forEach((r) => {
+      if (r.isBullet) {
+        if (!inList) { html += '<ul class="verse-list">'; inList = true; }
+        html += `<li>${escapeHtml(r.text)}</li>`;
+      } else {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += `<div class="verse-line">${escapeHtml(r.text) || '&nbsp;'}</div>`;
+      }
+    });
+    if (inList) html += '</ul>';
+    return html;
+  }
+
   function renderVerse() {
     const hasVerse = !!(verseState && verseState.text);
     app.classList.toggle('has-verse', hasVerse);
     versePanelEl.classList.toggle('show', hasVerse);
     verseAddBtn.style.display = hasVerse ? 'none' : '';
     if (hasVerse) {
-      verseTextEl.textContent = verseState.text;
+      verseTextEl.innerHTML = renderVerseLines(verseState.text);
       verseRefEl.textContent = verseState.ref || '';
       verseRefEl.style.display = verseState.ref ? '' : 'none';
     }
