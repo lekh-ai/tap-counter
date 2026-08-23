@@ -140,6 +140,58 @@
     transform: translateY(0);
   }
 
+  #volume {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    background: rgba(255,255,255,0.06);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 999px;
+    z-index: 10;
+  }
+
+  #volume svg {
+    width: 16px;
+    height: 16px;
+    color: rgba(255,255,255,0.55);
+    flex-shrink: 0;
+  }
+
+  #volume input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 90px;
+    height: 3px;
+    border-radius: 999px;
+    background: linear-gradient(to right, #7c3aed, #06b6d4);
+    cursor: pointer;
+  }
+
+  #volume input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 6px rgba(196, 181, 253, 0.9);
+    cursor: pointer;
+  }
+
+  #volume input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border: none;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 6px rgba(196, 181, 253, 0.9);
+    cursor: pointer;
+  }
+
   #reset {
     position: fixed;
     bottom: 40px;
@@ -303,6 +355,14 @@
 
 <div id="toast">🎉 100 taps reached!</div>
 <button id="reset">Reset <kbd>R</kbd></button>
+<div id="volume">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="4 9 8 9 12 5 12 19 8 15 4 15" fill="currentColor" stroke="none"/>
+    <path d="M16 8a5 5 0 0 1 0 8"/>
+    <path d="M18.5 5.5a9 9 0 0 1 0 13"/>
+  </svg>
+  <input type="range" id="volume-slider" min="0" max="100" value="70" aria-label="Effect volume">
+</div>
 
 <script>
   const STORAGE_KEY = 'god-challenge-count';
@@ -347,12 +407,33 @@
     75: 'Muttering becomes conviction 🔥',
     100: '🎉 Manifesting — 100 taps reached!',
   };
+  const VOLUME_KEY = 'god-challenge-volume';
+  const volumeSlider = document.getElementById('volume-slider');
+  let effectVolume = 0.7;
+  try {
+    const savedVol = parseInt(localStorage.getItem(VOLUME_KEY), 10);
+    if (Number.isFinite(savedVol) && savedVol >= 0 && savedVol <= 100) effectVolume = savedVol / 100;
+  } catch (e) {}
+  volumeSlider.value = Math.round(effectVolume * 100);
+
   let audioCtx = null;
+  let masterGain = null;
   function getAudioCtx() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = effectVolume;
+      masterGain.connect(audioCtx.destination);
+    }
     if (audioCtx.state === 'suspended') audioCtx.resume();
     return audioCtx;
   }
+
+  volumeSlider.addEventListener('input', () => {
+    effectVolume = volumeSlider.value / 100;
+    if (masterGain) masterGain.gain.value = effectVolume;
+    try { localStorage.setItem(VOLUME_KEY, volumeSlider.value); } catch (e) {}
+  });
 
   function updateDisplay() {
     countEl.textContent = count;
@@ -684,7 +765,7 @@
         gain.gain.linearRampToValueAtTime(0.3, now + delay + 0.02);
         gain.gain.linearRampToValueAtTime(0, now + delay + 0.13);
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        gain.connect(masterGain);
         osc.start(now + delay);
         osc.stop(now + delay + 0.15);
       });
@@ -703,7 +784,7 @@
       gain.gain.setValueAtTime(0.15, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
       osc.connect(gain);
-      gain.connect(ctx.destination);
+      gain.connect(masterGain);
       osc.start(now);
       osc.stop(now + 0.06);
     } catch (e) {}
