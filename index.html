@@ -1223,19 +1223,19 @@
 
   // ---- arches at each end (spiritual gold, physical cyan) ----
   function makeArch(color, atStart) {
+    // a simple post-and-lintel gate reads clearly as an archway from any camera
+    // angle, unlike a thin torus arc which can foreshorten into an odd sliver.
     const group = new THREE.Group();
-    const legGeo = new THREE.CylinderGeometry(2.2, 2.2, 70, 8);
+    const legGeo = new THREE.CylinderGeometry(2.6, 2.6, 76, 8);
     const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6, metalness: 0.2, roughness: 0.4 });
-    const legL = new THREE.Mesh(legGeo, mat); legL.position.set(-22, 35, 0);
-    const legR = new THREE.Mesh(legGeo, mat); legR.position.set(22, 35, 0);
-    const archTop = new THREE.Mesh(new THREE.TorusGeometry(22, 2.2, 8, 24, Math.PI), mat);
-    archTop.position.set(0, 70, 0);
-    archTop.rotation.z = Math.PI;
-    group.add(legL, legR, archTop);
+    const legL = new THREE.Mesh(legGeo, mat); legL.position.set(-26, 38, 0);
+    const legR = new THREE.Mesh(legGeo, mat); legR.position.set(26, 38, 0);
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(58, 5, 5), mat);
+    lintel.position.set(0, 78, 0);
+    group.add(legL, legR, lintel);
     const u = atStart ? 0 : 1;
     const { x, z } = pathXZ(u);
     group.position.set(x, 0, z);
-    group.lookAt(x + (atStart ? 1 : -1), 0, z);
     return group;
   }
   scene.add(makeArch(0xffd28a, true));
