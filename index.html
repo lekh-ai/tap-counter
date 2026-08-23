@@ -72,13 +72,16 @@
 
   #ring .track {
     stroke: rgba(255,255,255,0.08);
+    stroke-dasharray: 1190 66;
+    stroke-dashoffset: 33;
   }
 
   #ring .progress {
     stroke: url(#grad);
-    stroke-dasharray: 1256;
-    stroke-dashoffset: 1256;
+    stroke-dasharray: 1190 66;
+    stroke-dashoffset: 1190;
     transition: stroke-dashoffset 0.25s ease;
+    filter: drop-shadow(0 0 6px rgba(6, 182, 212, 0.6));
   }
 
   #core {
@@ -218,30 +221,53 @@
   /* realms */
   .realm {
     position: fixed;
-    top: 0; bottom: 0;
-    width: min(14vw, 140px);
-    z-index: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
     pointer-events: none;
   }
-  .realm.spiritual {
-    left: 0;
-    background: linear-gradient(to right, rgba(124,58,237,0.28), transparent);
+  .realm.spiritual { left: clamp(24px, 4vw, 64px); }
+  .realm.physical { right: clamp(24px, 4vw, 64px); }
+
+  .realm-icon {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(255,255,255,0.03);
   }
-  .realm.physical {
-    right: 0;
-    background: linear-gradient(to left, rgba(6,182,212,0.22), transparent);
+  .realm-icon svg { width: 20px; height: 20px; }
+  .realm.spiritual .realm-icon {
+    box-shadow: 0 0 22px rgba(124, 58, 237, 0.35);
+    color: #c4b5fd;
   }
-  .realm span {
-    position: absolute;
-    top: 50%; left: 50%;
-    writing-mode: vertical-rl;
-    transform: translate(-50%, -50%);
+  .realm.physical .realm-icon {
+    box-shadow: 0 0 22px rgba(6, 182, 212, 0.3);
+    color: #67e8f9;
+  }
+
+  .realm-label {
+    text-align: center;
     text-transform: uppercase;
-    letter-spacing: 0.3em;
+    letter-spacing: 0.2em;
     font-size: 11px;
     font-weight: 700;
-    color: rgba(255,255,255,0.3);
+    line-height: 1.6;
+    color: rgba(255,255,255,0.55);
   }
+
+  .realm-underline {
+    width: 22px; height: 1px;
+    margin-top: 2px;
+  }
+  .realm.spiritual .realm-underline { background: rgba(196, 181, 253, 0.6); }
+  .realm.physical .realm-underline { background: rgba(103, 232, 249, 0.6); }
 
   /* root/ember background */
   #bg-canvas {
@@ -255,8 +281,25 @@
 </style>
 </head>
 <body>
-<div class="realm spiritual"><span>Spiritual</span></div>
-<div class="realm physical"><span>Physical</span></div>
+<div class="realm spiritual">
+  <div class="realm-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 2c1.5 3 4 4.5 4 8a4 4 0 0 1-8 0c0-1 .3-1.8.8-2.6C9.3 8.6 9 9.6 9 10.4c0 .9.4 1.6 1 2-1.2-2.2-.6-4.6 1-6.4.3 1.6 1.3 2.6 1.9 3.6.5.9.8 1.7.8 2.4A2.7 2.7 0 0 1 11 15"/>
+    </svg>
+  </div>
+  <div class="realm-label">Spiritual<br>Realm</div>
+  <div class="realm-underline"></div>
+</div>
+<div class="realm physical">
+  <div class="realm-icon">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 3c4 1 7 4.5 7 9a7 7 0 0 1-14 0c0-2.2 1-4 2.3-5.6C7.6 8 8 9.6 9 11c-.3-2.8 1-5.4 3-8z"/>
+      <path d="M12 22v-6"/>
+    </svg>
+  </div>
+  <div class="realm-label">Physical<br>Realm</div>
+  <div class="realm-underline"></div>
+</div>
 <canvas id="bg-canvas"></canvas>
 <div id="app">
   <div id="titles">
@@ -291,7 +334,7 @@
   const resetBtn = document.getElementById('reset');
   const progressEl = document.querySelector('#ring .progress');
   const toastEl = document.getElementById('toast');
-  const CIRC = 1256; // 2 * PI * 200, matches stroke-dasharray
+  const CIRC = 1190; // visible arc length, matches #ring .progress dasharray
   let audioCtx = null;
   function getAudioCtx() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -422,11 +465,16 @@
     return { x, y };
   }
 
-  function strokeGrowingLine(pts, reveal, widthStart, widthEnd, alpha, time, waveFn, colorStops) {
+  function strokeGrowingLine(pts, reveal, widthStart, widthEnd, alpha, time, waveFn, colorStops, glowColor) {
     if (reveal <= 0) return null;
     const steps = Math.max(2, Math.round((pts.length - 1) * clamp01(reveal)) + 1);
     let prev = pointAt(pts, 0, waveFn, time);
     let tip = prev;
+    bctx.save();
+    if (glowColor) {
+      bctx.shadowColor = glowColor;
+      bctx.shadowBlur = 6;
+    }
     for (let s = 1; s <= steps; s++) {
       const localT = Math.min(1, s / (pts.length - 1));
       const revealT = Math.min(localT, reveal);
@@ -443,7 +491,19 @@
       prev = cur;
       if (revealT >= reveal) break;
     }
+    bctx.restore();
     return tip;
+  }
+
+  function drawNode(p, size, color, glow) {
+    bctx.save();
+    bctx.shadowColor = glow;
+    bctx.shadowBlur = size * 4;
+    bctx.beginPath();
+    bctx.arc(p.x * W, p.y * H, size, 0, Math.PI * 2);
+    bctx.fillStyle = color;
+    bctx.fill();
+    bctx.restore();
   }
 
   const spiritColor = [124, 58, 237];
@@ -517,33 +577,48 @@
       const reveal = clamp01(progress * trunk.growthSpeed * 1.15);
       if (reveal <= 0) return;
       const widthScale = 0.35 + 0.65 * progress;
-      strokeGrowingLine(
+      const trunkTip = strokeGrowingLine(
         trunk.pts, reveal,
         trunk.baseWidth * widthScale, trunk.tipWidth * widthScale,
         0.8, time, (t, tm) => trunkWaveAt(trunk, t, tm),
-        (t, a) => rootColorAt(t, a * (1 - t * 0.5))
+        (t, a) => rootColorAt(t, a * (1 - t * 0.5)),
+        'rgba(124, 58, 237, 0.5)'
       );
+      const nodeFlicker = 0.7 + 0.3 * Math.sin(time * 0.002 + trunk.phase);
+      if (trunkTip && reveal < 1) {
+        drawNode(trunkTip, (1.2 + 1.6 * widthScale) * nodeFlicker, 'rgba(230, 220, 255, 0.9)', 'rgba(196, 181, 253, 0.9)');
+      }
 
       trunk.branches.forEach((branch) => {
         if (progress < branch.appearAt) return;
         const bReveal = clamp01(((progress - branch.appearAt) / Math.max(0.01, 1 - branch.appearAt)) * branch.growthSpeed * 1.3);
         if (bReveal <= 0) return;
-        strokeGrowingLine(
+        const branchTip = strokeGrowingLine(
           branch.pts, bReveal,
           branch.baseWidth * widthScale, branch.baseWidth * widthScale * 0.15,
           branch.alpha, time, (s, tm) => branchWaveAt(trunk, branch, s, tm),
-          (t, a) => rootColorAt(branch.pts[0].x + t * 0.1, a * (1 - bReveal * 0.3) * (1 - t))
+          (t, a) => rootColorAt(branch.pts[0].x + t * 0.1, a * (1 - bReveal * 0.3) * (1 - t)),
+          'rgba(124, 58, 237, 0.4)'
         );
+        if (branchTip) {
+          const flick = 0.6 + 0.4 * Math.sin(time * 0.0024 + branch.phase);
+          drawNode(branchTip, (0.9 + widthScale) * flick, 'rgba(220, 235, 255, 0.85)', 'rgba(103, 232, 249, 0.7)');
+        }
         branch.children.forEach((child) => {
           if (progress < child.appearAt) return;
           const cReveal = clamp01(((progress - child.appearAt) / Math.max(0.01, 1 - child.appearAt)) * child.growthSpeed * 1.3);
           if (cReveal <= 0) return;
-          strokeGrowingLine(
+          const childTip = strokeGrowingLine(
             child.pts, cReveal,
             child.baseWidth * widthScale, child.baseWidth * widthScale * 0.1,
             child.alpha, time, (u, tm) => childWaveAt(trunk, branch, child, u, tm),
-            (t, a) => rootColorAt(child.pts[0].x + t * 0.1, a * (1 - t))
+            (t, a) => rootColorAt(child.pts[0].x + t * 0.1, a * (1 - t)),
+            'rgba(6, 182, 212, 0.35)'
           );
+          if (childTip) {
+            const flick = 0.5 + 0.5 * Math.sin(time * 0.003 + child.phase);
+            drawNode(childTip, 0.7 * flick, 'rgba(210, 240, 255, 0.75)', 'rgba(103, 232, 249, 0.6)');
+          }
         });
       });
     });
