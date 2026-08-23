@@ -1293,26 +1293,41 @@
   water.material.side = THREE.DoubleSide; // guard against winding-order mistakes in the custom ribbon geometry
   scene.add(water);
 
-  // ---- rounded gold stones drifting on the water's surface, not static in the bed ----
+  // irregular, angular gold nuggets — a jittered icosahedron reads as a real chunky
+  // nugget with sharp glinting facets, not a smooth egg or gem
+  function makeNuggetGeometry(size) {
+    const geo = new THREE.IcosahedronGeometry(size, 1);
+    const pos = geo.attributes.position;
+    const v = new THREE.Vector3();
+    for (let i = 0; i < pos.count; i++) {
+      v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+      const n = v.clone().normalize();
+      const bump = 0.68 + Math.random() * 0.55; // irregular per-vertex displacement
+      v.copy(n.multiplyScalar(size * bump));
+      pos.setXYZ(i, v.x, v.y * 0.8, v.z); // slight overall squash so it rests naturally
+    }
+    geo.computeVertexNormals();
+    return geo;
+  }
+
+  // ---- gold nuggets pouring out from the temple and drifting downstream ----
   const stoneGroup = new THREE.Group();
   scene.add(stoneGroup);
   const STONE_COUNT = 42;
   const stones = [];
   for (let i = 0; i < STONE_COUNT; i++) {
-    const u = Math.random();
+    // biased toward u≈0 so the visible population reads as emerging from the
+    // temple gate and spreading outward, not scattered evenly with no source
+    const u = Math.random() * Math.random() * 0.7;
     const size = 3.5 + Math.random() * 8;
-    // a smoothed, slightly squashed sphere reads as a glossy river pebble,
-    // not a faceted gem sitting off to the side
-    const geo = new THREE.SphereGeometry(size, 20, 14);
-    geo.scale(1, 0.72, 1);
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: 0xffc85a, metalness: 0.75, roughness: 0.15,
-      clearcoat: 1, clearcoatRoughness: 0.1,
-      envMapIntensity: 1.4,
-      emissive: 0x7a4a10, emissiveIntensity: 0.4,
+    const geo = makeNuggetGeometry(size);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0xffc040, metalness: 0.92, roughness: 0.22,
+      envMapIntensity: 1.8,
+      emissive: 0x5a3608, emissiveIntensity: 0.25,
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.rotation.y = Math.random() * Math.PI;
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
     stoneGroup.add(mesh);
     stones.push({
       mesh, size,
@@ -1387,7 +1402,7 @@
   const moteOffset = new Float32Array(MOTE_COUNT);
   const moteSpeed = new Float32Array(MOTE_COUNT);
   for (let i = 0; i < MOTE_COUNT; i++) {
-    moteU[i] = Math.random();
+    moteU[i] = Math.random() * Math.random(); // biased near the temple so they visibly pour out of it
     moteOffset[i] = (Math.random() - 0.5) * 1.4;
     moteSpeed[i] = 0.00006 + Math.random() * 0.00012;
   }
