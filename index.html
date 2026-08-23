@@ -1707,8 +1707,58 @@
   let pendingConfirm = false; // whole verse spoken once; waiting for the last word to be repeated
   let awaitingReset = false; // just confirmed — ignore further results until the flash clears
 
+  // some browsers' hi-IN recognizer transcribes speech as Romanized ("Hinglish")
+  // text rather than Devanagari, which would never match a Devanagari verse at
+  // all — so Devanagari is approximately transliterated to the same Latin form
+  // before comparing, on both the verse text and (if it ever comes back that
+  // way) the spoken words.
+  const DEVANAGARI_CONSONANTS = {
+    'क':'k','ख':'kh','ग':'g','घ':'gh','ङ':'ng',
+    'च':'ch','छ':'chh','ज':'j','झ':'jh','ञ':'ny',
+    'ट':'t','ठ':'th','ड':'d','ढ':'dh','ण':'n',
+    'त':'t','थ':'th','द':'d','ध':'dh','न':'n',
+    'प':'p','फ':'ph','ब':'b','भ':'bh','म':'m',
+    'य':'y','र':'r','ल':'l','व':'v',
+    'श':'sh','ष':'sh','स':'s','ह':'h','ळ':'l',
+    'क़':'q','ख़':'kh','ग़':'gh','ज़':'z','ड़':'r','ढ़':'rh','फ़':'f',
+  };
+  const DEVANAGARI_MATRAS = {
+    'ा':'a', 'ि':'i', 'ी':'i', 'ु':'u', 'ू':'u', 'ृ':'ri',
+    'े':'e', 'ै':'ai', 'ो':'o', 'ौ':'au', 'ं':'n', 'ः':'h', 'ँ':'n',
+  };
+  const DEVANAGARI_VOWELS = {
+    'अ':'a', 'आ':'a', 'इ':'i', 'ई':'i', 'उ':'u', 'ऊ':'u', 'ऋ':'ri',
+    'ए':'e', 'ऐ':'ai', 'ओ':'o', 'औ':'au', 'ॐ':'om',
+  };
+  const DEVANAGARI_DIGITS = '०१२३४५६७८९';
+
+  function devanagariToRoman(str) {
+    const chars = Array.from(str);
+    let out = '';
+    for (let i = 0; i < chars.length; i++) {
+      const c = chars[i];
+      if (DEVANAGARI_CONSONANTS[c]) {
+        out += DEVANAGARI_CONSONANTS[c];
+        const next = chars[i + 1];
+        if (next === '्') { i++; } // virama: suppress the inherent vowel
+        else if (next && DEVANAGARI_MATRAS[next]) { out += DEVANAGARI_MATRAS[next]; i++; }
+        else { out += 'a'; }
+      } else if (DEVANAGARI_VOWELS[c]) {
+        out += DEVANAGARI_VOWELS[c];
+      } else if (DEVANAGARI_MATRAS[c]) {
+        out += DEVANAGARI_MATRAS[c];
+      } else if (DEVANAGARI_DIGITS.includes(c)) {
+        out += DEVANAGARI_DIGITS.indexOf(c);
+      } else {
+        out += c;
+      }
+    }
+    return out;
+  }
+
   function normalizeWord(w) {
-    return w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+    const roman = /[ऀ-ॿ]/.test(w) ? devanagariToRoman(w) : w;
+    return roman.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
   }
 
   function expectedWords() {
@@ -1740,9 +1790,10 @@
     if (!expected.length) return;
 
     // the whole verse was already spoken once — the only thing left is hearing
-    // the last word again as a deliberate confirmation before it counts
+    // the last word again as a deliberate confirmation before it counts (saying
+    // "Ameen Ameen" / "Amen Amen" back to back also confirms it)
     if (pendingConfirm) {
-      if (spokenWords.includes(expected[expected.length - 1])) commitAffirmation();
+      if (spokenWords.includes(expected[expected.length - 1]) || hasAmeenAmeen(spokenWords)) commitAffirmation();
       return;
     }
 
@@ -1767,9 +1818,22 @@
     applyAffirmProgress();
     if (matchedCount >= expected.length) {
       enterPendingConfirm();
-      // the repeat may already be sitting right there in this same batch of words
-      if (spokenWords.slice(si).includes(expected[expected.length - 1])) commitAffirmation();
+      // the repeat (or "Ameen Ameen") may already be sitting right there in this same batch
+      const rest = spokenWords.slice(si);
+      if (rest.includes(expected[expected.length - 1]) || hasAmeenAmeen(rest)) commitAffirmation();
     }
+  }
+
+  // "Ameen Ameen" (or "Amen Amen") spoken back to back is an alternate way to
+  // confirm the verse, instead of repeating its last word
+  function hasAmeenAmeen(words) {
+    for (let i = 0; i < words.length - 1; i++) {
+      if (isAmeen(words[i]) && isAmeen(words[i + 1])) return true;
+    }
+    return false;
+  }
+  function isAmeen(w) {
+    return w === 'ameen' || w === 'amen' || w === 'aamin' || w === 'amin';
   }
 
   // verse fully spoken once — hold here glowing the last word until it's said
