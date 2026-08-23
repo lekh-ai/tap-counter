@@ -1363,6 +1363,16 @@
 
   // irregular, angular gold nuggets — a jittered icosahedron reads as a real chunky
   // nugget with sharp glinting facets, not a smooth egg or gem
+  // IcosahedronGeometry duplicates a vertex at every face corner it touches (so each
+  // face can have its own flat normal). Displacing each duplicate by an independent
+  // random amount pulls coincident corners apart and tears the mesh open. Hashing the
+  // direction instead gives every duplicate of the same corner the identical bump, so
+  // the solid stays closed while still reading as an irregular nugget.
+  function hashDir(n) {
+    const key = Math.round(n.x * 500) * 73856093 ^ Math.round(n.y * 500) * 19349663 ^ Math.round(n.z * 500) * 83492791;
+    const h = Math.sin(key) * 43758.5453;
+    return h - Math.floor(h);
+  }
   function makeNuggetGeometry(size) {
     const geo = new THREE.IcosahedronGeometry(size, 1);
     const pos = geo.attributes.position;
@@ -1370,9 +1380,9 @@
     for (let i = 0; i < pos.count; i++) {
       v.set(pos.getX(i), pos.getY(i), pos.getZ(i));
       const n = v.clone().normalize();
-      const bump = 0.68 + Math.random() * 0.55; // irregular per-vertex displacement
+      const bump = 0.82 + hashDir(n) * 0.32; // deterministic per-direction displacement
       v.copy(n.multiplyScalar(size * bump));
-      pos.setXYZ(i, v.x, v.y * 0.8, v.z); // slight overall squash so it rests naturally
+      pos.setXYZ(i, v.x, v.y * 0.82, v.z); // slight overall squash so it rests naturally
     }
     geo.computeVertexNormals();
     return geo;
