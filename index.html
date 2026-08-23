@@ -1126,8 +1126,8 @@
   scene.fog = new THREE.FogExp2(0x0a0a12, 0.0016);
 
   const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 1, 4000);
-  camera.position.set(0, 95, 150);
-  camera.lookAt(70, -10, -140);
+  camera.position.set(-260, 70, 260);
+  camera.lookAt(-260, 10, -60);
 
   scene.add(new THREE.HemisphereLight(0x9d7bff, 0x08050c, 0.7));
   const sunLight = new THREE.DirectionalLight(0xffdca8, 1.6);
@@ -1586,11 +1586,11 @@
     moteGeo.attributes.position.needsUpdate = true;
     moteMat.opacity = Math.min(1, 0.7 + gs.tapPct * 0.5);
 
-    // gentle cinematic camera sway
+    // gentle cinematic camera sway, around the temple-facing base position/target set above
     if (!prefersReducedMotion) {
-      camera.position.x = Math.sin(t * 0.05) * 14;
-      camera.position.y = 95 + Math.sin(t * 0.04) * 6;
-      camera.lookAt(70, -10, -140);
+      camera.position.x = -260 + Math.sin(t * 0.05) * 14;
+      camera.position.y = 70 + Math.sin(t * 0.04) * 6;
+      camera.lookAt(-260, 10, -60);
     }
 
     renderer.render(scene, camera);
