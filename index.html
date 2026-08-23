@@ -976,8 +976,8 @@
 
     const canvas2d = document.getElementById('bg-canvas');
     const canvasGl = document.getElementById('bg-webgl');
-    if (canvas2d) canvas2d.style.display = scene === 'branches' ? '' : 'none';
-    if (canvasGl) canvasGl.style.display = scene === 'river' ? '' : 'none';
+    if (canvas2d) canvas2d.style.display = scene === 'branches' ? 'block' : 'none';
+    if (canvasGl) canvasGl.style.display = scene === 'river' ? 'block' : 'none';
   }
 
   function setScene(scene) {
