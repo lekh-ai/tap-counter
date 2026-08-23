@@ -1199,8 +1199,8 @@
   scene.fog = new THREE.FogExp2(0x0a0a12, 0.0016);
 
   const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 1, 4000);
-  camera.position.set(-260, 70, 260);
-  camera.lookAt(-260, 10, -60);
+  camera.position.set(-178, 90, 252);
+  camera.lookAt(-145, 50, -57);
 
   scene.add(new THREE.HemisphereLight(0x9d7bff, 0x08050c, 0.7));
   const sunLight = new THREE.DirectionalLight(0xffdca8, 1.6);
@@ -1620,7 +1620,7 @@
 
   // ---- Blender-style orbit camera + debug panel, hidden by default (press C) ----
   const controls = new OrbitControls(camera, renderer.domElement);
-  controls.target.set(-260, 10, -60);
+  controls.target.set(-145, 50, -57);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
   controls.minDistance = 20;
@@ -1738,9 +1738,9 @@
         `target: (${tg.x.toFixed(0)}, ${tg.y.toFixed(0)}, ${tg.z.toFixed(0)})`;
     } else if (!prefersReducedMotion) {
       // gentle cinematic camera sway, around the temple-facing base position/target
-      camera.position.x = -260 + Math.sin(t * 0.05) * 14;
-      camera.position.y = 70 + Math.sin(t * 0.04) * 6;
-      camera.lookAt(-260, 10, -60);
+      camera.position.x = -178 + Math.sin(t * 0.05) * 14;
+      camera.position.y = 90 + Math.sin(t * 0.04) * 6;
+      camera.lookAt(-145, 50, -57);
     }
 
     renderer.render(scene, camera);
