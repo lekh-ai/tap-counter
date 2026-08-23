@@ -574,8 +574,10 @@
   const TRUNK_FREQ = 0.0005, BRANCH_FREQ = 0.0011, CHILD_FREQ = 0.0014;
   const TRUNK_WAVE_AMP = 0.006, BRANCH_WAVE_AMP = 0.014, CHILD_WAVE_AMP = 0.018;
 
-  function makeBranch(parentPts, depth) {
-    const idx = 1 + Math.floor(Math.random() * (parentPts.length - 2));
+  function makeBranch(parentPts, depth, opts) {
+    opts = opts || {};
+    const idxMax = opts.idxMax || (parentPts.length - 2);
+    const idx = 1 + Math.floor(Math.random() * Math.max(1, Math.min(idxMax, parentPts.length - 2)));
     const parentT = idx / (parentPts.length - 1);
     const start = parentPts[idx];
     const dir = Math.random() < 0.5 ? -1 : 1;
@@ -588,10 +590,11 @@
       pts,
       parentT,
       phase: rand(0, Math.PI * 2),
-      appearAt: rand(0.02, depth === 1 ? 0.55 : 0.75),
+      appearAt: opts.appearMax != null ? rand(0, opts.appearMax) : rand(0.02, depth === 1 ? 0.55 : 0.75),
       growthSpeed: rand(0.8, 1.4),
       baseWidth: depth === 1 ? rand(1.1, 1.9) : rand(0.5, 0.9),
       alpha: depth === 1 ? rand(0.55, 0.8) : rand(0.35, 0.55),
+      hasLeaf: depth === 1 && Math.random() < 0.7,
       children: [],
     };
     if (depth === 1 && Math.random() < 0.8) {
@@ -617,6 +620,15 @@
       };
       const branchCount = 4 + Math.floor(Math.random() * 4);
       for (let b = 0; b < branchCount; b++) trunk.branches.push(makeBranch(pts, 1));
+
+      // extra branches clustered near the spiritual origin, visible from the start,
+      // so the root network reads noticeably denser on that side by default
+      const denseCount = 5 + Math.floor(Math.random() * 3);
+      const idxMax = Math.max(2, Math.floor((pts.length - 2) * 0.35));
+      for (let d = 0; d < denseCount; d++) {
+        trunk.branches.push(makeBranch(pts, 1, { idxMax, appearMax: 0.08 }));
+      }
+
       trunks.push(trunk);
     }
     return trunks;
@@ -669,6 +681,26 @@
       if (revealT >= reveal) break;
     }
     return tip;
+  }
+
+  function drawLeaf(p, angle, size, color, alpha) {
+    bctx.save();
+    bctx.translate(p.x * W, p.y * H);
+    bctx.rotate(angle);
+    bctx.beginPath();
+    bctx.moveTo(0, 0);
+    bctx.quadraticCurveTo(size * 0.5, -size * 0.4, size * 1.1, 0);
+    bctx.quadraticCurveTo(size * 0.5, size * 0.4, 0, 0);
+    bctx.fillStyle = color;
+    bctx.globalAlpha = alpha;
+    bctx.fill();
+    bctx.beginPath();
+    bctx.moveTo(0, 0);
+    bctx.lineTo(size * 1.05, 0);
+    bctx.strokeStyle = color;
+    bctx.lineWidth = 0.4;
+    bctx.stroke();
+    bctx.restore();
   }
 
   const spiritColor = [124, 58, 237];
@@ -759,6 +791,15 @@
           branch.alpha, time, (s, tm) => branchWaveAt(trunk, branch, s, tm),
           (t, a) => rootColorAt(branch.pts[0].x + t * 0.1, a * (1 - bReveal * 0.3) * (1 - t))
         );
+        if (branch.hasLeaf && bReveal > 0.55) {
+          const last = branch.pts[branch.pts.length - 1];
+          const prevPt = branch.pts[branch.pts.length - 2];
+          const angle = Math.atan2((last.y - prevPt.y) * H, (last.x - prevPt.x) * W);
+          const tipPt = pointAt(branch.pts, bReveal, (s, tm) => branchWaveAt(trunk, branch, s, tm), time);
+          const leafSize = (2.2 + branch.baseWidth) * widthScale;
+          const leafAlpha = Math.min(1, (bReveal - 0.55) / 0.3) * branch.alpha;
+          drawLeaf(tipPt, angle, leafSize, rootColorAt(branch.pts[0].x + 0.05, 1), leafAlpha);
+        }
         branch.children.forEach((child) => {
           if (progress < child.appearAt) return;
           const cReveal = clamp01(((progress - child.appearAt) / Math.max(0.01, 1 - child.appearAt)) * child.growthSpeed * 1.3);
