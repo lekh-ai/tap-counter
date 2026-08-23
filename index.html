@@ -319,7 +319,6 @@
   @media (max-width: 860px) {
     #verse-panel {
       max-width: 90vw;
-      text-align: center;
     }
   }
 
@@ -604,6 +603,38 @@
   }
 
   /* river debug panel — hidden by default, toggled with the C key */
+  #debug-toggle-btn {
+    position: fixed;
+    bottom: 24px;
+    left: 24px;
+    width: 34px;
+    height: 34px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    color: rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 50%;
+    cursor: pointer;
+    z-index: 30;
+    opacity: 0;
+    pointer-events: none;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.4s ease;
+  }
+  /* hidden until a shake gesture reveals it (see the devicemotion listener) —
+     desktop doesn't need it since the C key opens the panel directly */
+  #debug-toggle-btn.revealed {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  #debug-toggle-btn:hover, #debug-toggle-btn.active {
+    color: #fff;
+    background: rgba(255,255,255,0.12);
+  }
+
   #river-debug {
     position: fixed;
     top: 90px;
@@ -715,6 +746,74 @@
     0%, 100% { transform: translateY(0) rotate(0deg); }
     50% { transform: translateY(-16px) rotate(4deg); }
   }
+
+  @media (max-width: 860px) {
+    /* mobile relies on flex-centering the ring/verse-panel group, which gives no
+       guaranteed clearance for the fixed top toolbar, the absolutely-positioned
+       title, or the fixed Reset button — so on a tall verse it all collided.
+       Switch to a normal top-to-bottom scroll with reserved space at both ends
+       instead of forcing everything into one centered, unscrollable screen.
+       (Placed at the end of the stylesheet so these overrides actually win the
+       cascade against the later plain-selector base rules above.) */
+    #app, #app.has-verse {
+      justify-content: flex-start;
+      height: auto;
+      min-height: 100vh;
+      overflow-y: auto;
+      padding-top: 168px;
+      padding-bottom: 120px;
+      gap: 24px;
+    }
+
+    /* the top toggle/volume pills are fixed at top:24px and were overlapping
+       the title, which sat right above the ring at the same height */
+    #scene-toggle, #volume {
+      top: 14px;
+      padding: 3px;
+    }
+    #scene-toggle button {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    #volume {
+      padding: 8px 12px;
+      gap: 6px;
+    }
+    #volume input[type="range"] {
+      width: 60px;
+    }
+    #titles {
+      top: 76px;
+      width: 94vw;
+    }
+    #title {
+      font-size: clamp(22px, 8vw, 40px);
+    }
+    #subtitle {
+      font-size: clamp(10px, 3vw, 13px);
+    }
+    #ring-wrap {
+      width: min(58vw, 300px);
+      height: min(58vw, 300px);
+      flex-shrink: 0;
+    }
+    #verse-panel {
+      /* kept well clear of the fixed Reset pill at the bottom — long verses
+         scroll inside the panel itself (#verse-scroll) rather than pushing the
+         panel's bottom edge under Reset */
+      max-height: 34vh;
+      margin-bottom: 90px;
+    }
+    #river-debug {
+      top: auto;
+      bottom: 68px;
+      left: 24px;
+      right: 24px;
+      width: auto;
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+  }
 </style>
 <script type="importmap">
 {
@@ -730,6 +829,7 @@
 <div class="realm physical"><span>Physical</span></div>
 <canvas id="bg-canvas"></canvas>
 <canvas id="bg-webgl"></canvas>
+<button type="button" id="debug-toggle-btn" title="Scene controls" aria-label="Scene controls">⚙</button>
 <div id="river-debug">
   <h4>Scene Controls</h4>
   <div id="verse-ctrl-group">
@@ -755,7 +855,7 @@
     <input type="range" id="dbg-size" min="0.3" max="2.5" step="0.05" value="1">
     <label><span>River speed</span><span id="dbg-speed-val">1.0×</span></label>
     <input type="range" id="dbg-speed" min="0" max="4" step="0.05" value="1">
-    <div class="hint">Left-drag: orbit · Right-drag: pan<br>Scroll: zoom · Press C to hide</div>
+    <div class="hint">Left-drag: orbit · Right-drag: pan<br>Scroll: zoom · Press C or tap ⚙ to hide</div>
     <div id="dbg-cam-info" class="hint" style="margin-top:10px; color:rgba(196,181,253,0.9); font-family:monospace; white-space:pre-line;"></div>
   </div>
   <div id="branches-ctrl-group" style="display:none;">
@@ -765,7 +865,7 @@
     <input type="range" id="dbg-wind" min="0" max="3" step="0.1" value="1">
     <label><span>Branch thickness</span><span id="dbg-thickness-val">1.0×</span></label>
     <input type="range" id="dbg-thickness" min="0.3" max="2.5" step="0.1" value="1">
-    <div class="hint">Press C to hide</div>
+    <div class="hint">Press C or tap ⚙ to hide</div>
   </div>
 </div>
 <div id="symbols"></div>
@@ -2010,6 +2110,16 @@
   document.addEventListener('click', function once() {
     if (!document.fullscreenElement) requestFullscreen();
   }, { once: false });
+
+  // iOS gates devicemotion behind an explicit permission prompt that can only be
+  // triggered from a user gesture — piggyback on the very first tap so the shake
+  // gesture (see the devicemotion listener below) works without a visible ask
+  document.addEventListener('click', function requestMotionPermissionOnce() {
+    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+      DeviceMotionEvent.requestPermission().catch(() => {});
+    }
+    document.removeEventListener('click', requestMotionPermissionOnce);
+  }, { once: true });
 </script>
 
 <script type="module">
@@ -2495,11 +2605,36 @@
     controls.enabled = show;
     canvas.style.pointerEvents = show ? 'auto' : 'none';
     if (appEl) appEl.style.pointerEvents = show ? 'none' : '';
+    debugToggleBtn.classList.toggle('active', show);
   }
+  const debugToggleBtn = document.getElementById('debug-toggle-btn');
+  debugToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setDebugVisible(!debugPanel.classList.contains('show'));
+  });
   document.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey) {
       setDebugVisible(!debugPanel.classList.contains('show'));
     }
+  });
+
+  // shake the phone to reveal the hidden scene-controls button — there's no
+  // keyboard on mobile to press "C" with
+  let lastShakeAccel = null;
+  let lastShakeTime = 0;
+  const SHAKE_THRESHOLD = 18; // m/s² of jerk between samples
+  window.addEventListener('devicemotion', (e) => {
+    const a = e.accelerationIncludingGravity;
+    if (!a || a.x === null) return;
+    const now = Date.now();
+    if (lastShakeAccel) {
+      const delta = Math.abs(a.x - lastShakeAccel.x) + Math.abs(a.y - lastShakeAccel.y) + Math.abs(a.z - lastShakeAccel.z);
+      if (delta > SHAKE_THRESHOLD && now - lastShakeTime > 1000) {
+        lastShakeTime = now;
+        debugToggleBtn.classList.add('revealed');
+      }
+    }
+    lastShakeAccel = { x: a.x, y: a.y, z: a.z };
   });
 
   const dbgCount = document.getElementById('dbg-count');
