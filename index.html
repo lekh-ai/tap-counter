@@ -480,15 +480,26 @@
 <canvas id="bg-canvas"></canvas>
 <canvas id="bg-webgl"></canvas>
 <div id="river-debug">
-  <h4>River Controls</h4>
-  <label><span>Gold count</span><span id="dbg-count-val">72</span></label>
-  <input type="range" id="dbg-count" min="10" max="200" step="1" value="72">
-  <label><span>Gold size</span><span id="dbg-size-val">1.0×</span></label>
-  <input type="range" id="dbg-size" min="0.3" max="2.5" step="0.05" value="1">
-  <label><span>River speed</span><span id="dbg-speed-val">1.0×</span></label>
-  <input type="range" id="dbg-speed" min="0" max="4" step="0.05" value="1">
-  <div class="hint">Left-drag: orbit · Right-drag: pan<br>Scroll: zoom · Press C to hide</div>
-  <div id="dbg-cam-info" class="hint" style="margin-top:10px; color:rgba(196,181,253,0.9); font-family:monospace; white-space:pre-line;"></div>
+  <h4>Scene Controls</h4>
+  <div id="river-ctrl-group">
+    <label><span>Gold count</span><span id="dbg-count-val">72</span></label>
+    <input type="range" id="dbg-count" min="10" max="200" step="1" value="72">
+    <label><span>Gold size</span><span id="dbg-size-val">1.0×</span></label>
+    <input type="range" id="dbg-size" min="0.3" max="2.5" step="0.05" value="1">
+    <label><span>River speed</span><span id="dbg-speed-val">1.0×</span></label>
+    <input type="range" id="dbg-speed" min="0" max="4" step="0.05" value="1">
+    <div class="hint">Left-drag: orbit · Right-drag: pan<br>Scroll: zoom · Press C to hide</div>
+    <div id="dbg-cam-info" class="hint" style="margin-top:10px; color:rgba(196,181,253,0.9); font-family:monospace; white-space:pre-line;"></div>
+  </div>
+  <div id="branches-ctrl-group" style="display:none;">
+    <label><span>Branch density</span><span id="dbg-density-val">1.0×</span></label>
+    <input type="range" id="dbg-density" min="0.2" max="2.5" step="0.1" value="1">
+    <label><span>Wind turbulence</span><span id="dbg-wind-val">1.0×</span></label>
+    <input type="range" id="dbg-wind" min="0" max="3" step="0.1" value="1">
+    <label><span>Branch thickness</span><span id="dbg-thickness-val">1.0×</span></label>
+    <input type="range" id="dbg-thickness" min="0.3" max="2.5" step="0.1" value="1">
+    <div class="hint">Press C to hide</div>
+  </div>
 </div>
 <div id="symbols"></div>
 <div id="app">
@@ -760,6 +771,12 @@
     return branch;
   }
 
+  // live-adjustable via the debug panel (C) — persist across panel/scene toggles
+  // since they're just plain variables, never reset except by the user
+  let branchDensityMul = 1;
+  let windMul = 1;
+  let thicknessMul = 1;
+
   function buildTrunks(count) {
     const trunks = [];
     for (let i = 0; i < count; i++) {
@@ -774,12 +791,12 @@
         phase: rand(0, Math.PI * 2),
         branches: [],
       };
-      const branchCount = 4 + Math.floor(Math.random() * 4);
+      const branchCount = Math.round((4 + Math.floor(Math.random() * 4)) * branchDensityMul);
       for (let b = 0; b < branchCount; b++) trunk.branches.push(makeBranch(pts, 1));
 
       // extra branches clustered near the spiritual origin, visible from the start,
       // so the root network reads noticeably denser on that side by default
-      const denseCount = 5 + Math.floor(Math.random() * 3);
+      const denseCount = Math.round((5 + Math.floor(Math.random() * 3)) * branchDensityMul);
       const idxMax = Math.max(2, Math.floor((pts.length - 2) * 0.35));
       for (let d = 0; d < denseCount; d++) {
         trunk.branches.push(makeBranch(pts, 1, { idxMax, appearMax: 0.08 }));
@@ -790,16 +807,16 @@
     return trunks;
   }
 
-  const trunks = buildTrunks(6);
+  let trunks = buildTrunks(6);
 
   function trunkWaveAt(trunk, t, time) {
-    return TRUNK_WAVE_AMP * t * Math.sin(time * TRUNK_FREQ + trunk.phase);
+    return TRUNK_WAVE_AMP * windMul * t * Math.sin(time * TRUNK_FREQ + trunk.phase);
   }
   function branchWaveAt(trunk, branch, s, time) {
-    return trunkWaveAt(trunk, branch.parentT, time) + BRANCH_WAVE_AMP * s * Math.sin(time * BRANCH_FREQ + branch.phase);
+    return trunkWaveAt(trunk, branch.parentT, time) + BRANCH_WAVE_AMP * windMul * s * Math.sin(time * BRANCH_FREQ + branch.phase);
   }
   function childWaveAt(trunk, branch, child, u, time) {
-    return branchWaveAt(trunk, branch, child.parentT, time) + CHILD_WAVE_AMP * u * Math.sin(time * CHILD_FREQ + child.phase);
+    return branchWaveAt(trunk, branch, child.parentT, time) + CHILD_WAVE_AMP * windMul * u * Math.sin(time * CHILD_FREQ + child.phase);
   }
 
   // point along a polyline at normalized reveal fraction t (0..1); waveFn(t, time) supplies extra y-offset
@@ -898,23 +915,34 @@
     };
   }
 
-  const brFlowEmbers = [];
-  trunks.forEach((trunk) => {
-    brFlowEmbers.push(makeFlowEmber(trunk.pts, trunk, 0));
-    trunk.branches.forEach((branch) => {
-      brFlowEmbers.push(makeFlowEmber(branch.pts, trunk, branch.appearAt));
-      branch.children.forEach((child) => {
-        brFlowEmbers.push(makeFlowEmber(child.pts, trunk, child.appearAt));
+  let brFlowEmbers = [];
+  function rebuildFlowEmbers() {
+    brFlowEmbers = [];
+    trunks.forEach((trunk) => {
+      brFlowEmbers.push(makeFlowEmber(trunk.pts, trunk, 0));
+      trunk.branches.forEach((branch) => {
+        brFlowEmbers.push(makeFlowEmber(branch.pts, trunk, branch.appearAt));
+        branch.children.forEach((child) => {
+          brFlowEmbers.push(makeFlowEmber(child.pts, trunk, child.appearAt));
+        });
       });
     });
-  });
+  }
+  rebuildFlowEmbers();
+
+  // called when the branch density slider changes — regenerates the whole
+  // network since branch count is baked in at construction time
+  function regenerateBranches() {
+    trunks = buildTrunks(6);
+    rebuildFlowEmbers();
+  }
 
   function renderBranches(time) {
     // roots
     trunks.forEach((trunk) => {
       const reveal = clamp01(progress * trunk.growthSpeed * 1.15);
       if (reveal <= 0) return;
-      const widthScale = 0.35 + 0.65 * progress;
+      const widthScale = (0.35 + 0.65 * progress) * thicknessMul;
       strokeGrowingLine(
         trunk.pts, reveal,
         trunk.baseWidth * widthScale, trunk.tipWidth * widthScale,
@@ -1050,6 +1078,13 @@
     const canvasGl = document.getElementById('bg-webgl');
     if (canvas2d) canvas2d.style.display = scene === 'branches' ? 'block' : 'none';
     if (canvasGl) canvasGl.style.display = scene === 'river' ? 'block' : 'none';
+
+    // swap which half of the debug panel (C) is shown — the settings underneath
+    // are untouched, so nothing resets when switching scenes or toggling the panel
+    const riverGroup = document.getElementById('river-ctrl-group');
+    const branchesGroup = document.getElementById('branches-ctrl-group');
+    if (riverGroup) riverGroup.style.display = scene === 'river' ? '' : 'none';
+    if (branchesGroup) branchesGroup.style.display = scene === 'branches' ? '' : 'none';
   }
 
   function setScene(scene) {
@@ -1151,6 +1186,30 @@
       setScene(btn.dataset.scene);
     });
   });
+
+  // branches-scene debug sliders — density rebuilds the network, wind/thickness
+  // just scale live values read each frame, so they apply instantly with no rebuild
+  const dbgDensity = document.getElementById('dbg-density');
+  const dbgDensityVal = document.getElementById('dbg-density-val');
+  const dbgWind = document.getElementById('dbg-wind');
+  const dbgWindVal = document.getElementById('dbg-wind-val');
+  const dbgThickness = document.getElementById('dbg-thickness');
+  const dbgThicknessVal = document.getElementById('dbg-thickness-val');
+  if (dbgDensity) {
+    dbgDensity.addEventListener('input', () => {
+      branchDensityMul = parseFloat(dbgDensity.value);
+      dbgDensityVal.textContent = branchDensityMul.toFixed(1) + '×';
+      regenerateBranches();
+    });
+    dbgWind.addEventListener('input', () => {
+      windMul = parseFloat(dbgWind.value);
+      dbgWindVal.textContent = windMul.toFixed(1) + '×';
+    });
+    dbgThickness.addEventListener('input', () => {
+      thicknessMul = parseFloat(dbgThickness.value);
+      dbgThicknessVal.textContent = thicknessMul.toFixed(1) + '×';
+    });
+  }
 
   app.addEventListener('click', increment);
 
