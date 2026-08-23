@@ -1860,10 +1860,13 @@
     increment();
     playAlertSound();
     showToast('Verse affirmed 🙏');
+    // stop listening immediately (not just ignoring results) so no buffered/
+    // overlapping recognition event can sneak in and double-trigger this again
+    if (recognition) { try { recognition.stop(); } catch (e) {} }
     setTimeout(() => {
       resetAffirmProgress();
       awaitingReset = false;
-      if (listening) restartRecognitionSession();
+      if (listening && recognition) { try { recognition.start(); } catch (e) {} }
     }, 900);
   }
 
@@ -1888,12 +1891,6 @@
     matchedCount = idx < matchedCount ? idx : idx + 1;
     applyAffirmProgress();
     checkAffirmCompletion();
-  }
-
-  function restartRecognitionSession() {
-    if (!recognition) return;
-    try { recognition.stop(); } catch (e) {}
-    // onend will restart it if `listening` is still true
   }
 
   // guess a recognition locale from the verse's script since the affirmation
@@ -1932,7 +1929,9 @@
       }
     };
     rec.onend = () => {
-      if (listening) {
+      // if we just confirmed a tap, the deliberate setTimeout in commitAffirmation
+      // owns restarting it — don't race that with an immediate auto-restart here
+      if (listening && !awaitingReset) {
         try { rec.start(); } catch (e) {}
       }
     };
@@ -1942,6 +1941,10 @@
   function startAffirming() {
     if (!SpeechRecognitionImpl || !(verseState && verseState.text)) return;
     getAudioCtx(); // warm up audio now, on a real click, so the tap sound isn't muted later when a confirm fires from a speech callback
+    // never let a previous recognition instance keep running underneath a new
+    // one — two live instances both hearing the same speech is what caused
+    // "Ameen Ameen" (and other confirms) to double-count
+    if (recognition) { recognition.onend = null; try { recognition.stop(); } catch (e) {} }
     listening = true;
     verseMicBtn.classList.add('listening');
     verseHeardEl.textContent = 'listening…';
