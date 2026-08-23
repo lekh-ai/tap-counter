@@ -687,18 +687,21 @@
     bctx.save();
     bctx.translate(p.x * W, p.y * H);
     bctx.rotate(angle);
-    bctx.beginPath();
-    bctx.moveTo(0, 0);
-    bctx.quadraticCurveTo(size * 0.5, -size * 0.4, size * 1.1, 0);
-    bctx.quadraticCurveTo(size * 0.5, size * 0.4, 0, 0);
-    bctx.fillStyle = color;
     bctx.globalAlpha = alpha;
-    bctx.fill();
+    bctx.shadowColor = color;
+    bctx.shadowBlur = size * 0.6;
     bctx.beginPath();
     bctx.moveTo(0, 0);
-    bctx.lineTo(size * 1.05, 0);
-    bctx.strokeStyle = color;
-    bctx.lineWidth = 0.4;
+    bctx.quadraticCurveTo(size * 0.55, -size * 0.55, size * 1.4, 0);
+    bctx.quadraticCurveTo(size * 0.55, size * 0.55, 0, 0);
+    bctx.fillStyle = color;
+    bctx.fill();
+    bctx.shadowBlur = 0;
+    bctx.beginPath();
+    bctx.moveTo(0, 0);
+    bctx.lineTo(size * 1.3, 0);
+    bctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    bctx.lineWidth = Math.max(0.6, size * 0.08);
     bctx.stroke();
     bctx.restore();
   }
@@ -796,8 +799,8 @@
           const prevPt = branch.pts[branch.pts.length - 2];
           const angle = Math.atan2((last.y - prevPt.y) * H, (last.x - prevPt.x) * W);
           const tipPt = pointAt(branch.pts, bReveal, (s, tm) => branchWaveAt(trunk, branch, s, tm), time);
-          const leafSize = (2.2 + branch.baseWidth) * widthScale;
-          const leafAlpha = Math.min(1, (bReveal - 0.55) / 0.3) * branch.alpha;
+          const leafSize = (6 + branch.baseWidth * 2.2) * Math.max(widthScale, 0.7);
+          const leafAlpha = Math.min(1, (bReveal - 0.55) / 0.3) * Math.max(branch.alpha, 0.75);
           drawLeaf(tipPt, angle, leafSize, rootColorAt(branch.pts[0].x + 0.05, 1), leafAlpha);
         }
         branch.children.forEach((child) => {
@@ -815,8 +818,8 @@
             const prevPt = child.pts[child.pts.length - 2];
             const angle = Math.atan2((last.y - prevPt.y) * H, (last.x - prevPt.x) * W);
             const tipPt = pointAt(child.pts, cReveal, (u, tm) => childWaveAt(trunk, branch, child, u, tm), time);
-            const leafSize = (1.6 + child.baseWidth) * widthScale;
-            const leafAlpha = Math.min(1, (cReveal - 0.55) / 0.3) * child.alpha;
+            const leafSize = (4.5 + child.baseWidth * 2) * Math.max(widthScale, 0.7);
+            const leafAlpha = Math.min(1, (cReveal - 0.55) / 0.3) * Math.max(child.alpha, 0.7);
             drawLeaf(tipPt, angle, leafSize, rootColorAt(child.pts[0].x + 0.05, 1), leafAlpha);
           }
         });
