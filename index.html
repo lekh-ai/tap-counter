@@ -22,10 +22,13 @@
     display: flex;
     flex-direction: row;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     padding: 0 clamp(24px, 6vw, 110px);
     gap: 4vw;
     cursor: pointer;
+  }
+  #app.has-verse {
+    justify-content: space-between;
   }
 
   @media (max-width: 860px) {
@@ -283,12 +286,13 @@
     position: relative;
     z-index: 1;
     max-width: min(38vw, 480px);
-    pointer-events: none;
+    display: none;
     opacity: 0;
     transform: translateY(6px);
     transition: opacity 0.6s ease, transform 0.6s ease;
   }
   #verse-panel.show {
+    display: block;
     opacity: 1;
     transform: translateY(0);
   }
@@ -298,18 +302,6 @@
       max-width: 90vw;
       text-align: center;
     }
-  }
-
-  #verse-phase {
-    font-size: clamp(11px, 1.3vmin, 13px);
-    font-weight: 700;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    background: linear-gradient(135deg, #c4b5fd, #67e8f9);
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    margin-bottom: 14px;
   }
 
   #verse-text {
@@ -329,6 +321,118 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     color: rgba(196, 181, 253, 0.85);
+  }
+
+  #verse-actions {
+    margin-top: 18px;
+    display: flex;
+    gap: 10px;
+  }
+  @media (max-width: 860px) {
+    #verse-actions { justify-content: center; }
+  }
+  #verse-actions button {
+    padding: 7px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  #verse-actions button:hover {
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+  }
+
+  #verse-add-btn {
+    position: fixed;
+    bottom: 40px;
+    right: 24px;
+    z-index: 10;
+    padding: 12px 22px;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.55);
+    background: rgba(255,255,255,0.05);
+    border: 1px dashed rgba(255,255,255,0.2);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  #verse-add-btn:hover {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border-color: rgba(255,255,255,0.4);
+  }
+
+  #verse-form {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 40;
+    display: none;
+    width: min(38vw, 480px);
+    padding: 20px;
+    background: rgba(15, 12, 24, 0.92);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  #verse-form.show { display: block; }
+  #verse-form-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 35;
+    background: rgba(0,0,0,0.5);
+    display: none;
+  }
+  #verse-form-backdrop.show { display: block; }
+  @media (max-width: 860px) {
+    #verse-form { width: 90vw; }
+  }
+  #verse-form textarea,
+  #verse-form input {
+    width: 100%;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 14px;
+    color: #fff;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px;
+    resize: vertical;
+    outline: none;
+  }
+  #verse-form textarea:focus,
+  #verse-form input:focus {
+    border-color: rgba(196, 181, 253, 0.6);
+  }
+  #verse-form input { margin-top: 10px; }
+  #verse-form .verse-form-actions {
+    margin-top: 14px;
+    display: flex;
+    gap: 10px;
+  }
+  #verse-form .verse-form-actions button {
+    padding: 9px 20px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 999px;
+    cursor: pointer;
+    border: none;
+  }
+  #verse-save-btn {
+    color: #fff;
+    background: linear-gradient(135deg, #7c3aed, #06b6d4);
+  }
+  #verse-cancel-btn {
+    color: rgba(255,255,255,0.7);
+    background: rgba(255,255,255,0.08);
   }
 
   #toast {
@@ -588,9 +692,23 @@
     </div>
   </div>
   <div id="verse-panel">
-    <div id="verse-phase"></div>
     <div id="verse-text"></div>
     <div id="verse-ref"></div>
+    <div id="verse-actions">
+      <button type="button" id="verse-edit-btn">Edit</button>
+      <button type="button" id="verse-remove-btn">Remove</button>
+    </div>
+  </div>
+</div>
+
+<button type="button" id="verse-add-btn">+ Add verse</button>
+<div id="verse-form-backdrop"></div>
+<div id="verse-form">
+  <textarea id="verse-input" rows="4" placeholder="Enter a verse..."></textarea>
+  <input type="text" id="verse-ref-input" placeholder="Reference (e.g. John 3:16)">
+  <div class="verse-form-actions">
+    <button type="button" id="verse-save-btn">Save</button>
+    <button type="button" id="verse-cancel-btn">Cancel</button>
   </div>
 </div>
 
@@ -626,34 +744,14 @@
   const CIRC = 1256; // 2 * PI * 200, matches stroke-dasharray
 
   const PHASES = [
-    {
-      max: 25, label: 'Imagining',
-      verse: 'As he thinketh in his heart, so is he.',
-      ref: 'Proverbs 23:7',
-    },
-    {
-      max: 50, label: 'Musing',
-      verse: 'Let the words of my mouth and the meditation of my heart be acceptable in thy sight.',
-      ref: 'Psalm 19:14',
-    },
-    {
-      max: 75, label: 'Muttering',
-      verse: 'This book of the law shall not depart out of thy mouth; thou shalt meditate therein day and night.',
-      ref: 'Joshua 1:8',
-    },
-    {
-      max: 100, label: 'Manifesting',
-      verse: 'Whatsoever things ye desire, when ye pray, believe that ye receive them, and ye shall have them.',
-      ref: 'Mark 11:24',
-    },
+    { max: 25, label: 'Imagining' },
+    { max: 50, label: 'Musing' },
+    { max: 75, label: 'Muttering' },
+    { max: 100, label: 'Manifesting' },
   ];
   function phaseForCount(c) {
     return PHASES.find((p) => c <= p.max) || PHASES[PHASES.length - 1];
   }
-  const versePhaseEl = document.getElementById('verse-phase');
-  const verseTextEl = document.getElementById('verse-text');
-  const verseRefEl = document.getElementById('verse-ref');
-  const versePanelEl = document.getElementById('verse-panel');
   let lastPhaseLabel = null;
   function updatePhase() {
     const phase = phaseForCount(count);
@@ -663,15 +761,6 @@
       phaseEl.classList.remove('show');
       void phaseEl.offsetWidth;
       phaseEl.classList.add('show');
-
-      if (versePanelEl) {
-        versePanelEl.classList.remove('show');
-        void versePanelEl.offsetWidth;
-        versePhaseEl.textContent = phase.label;
-        verseTextEl.textContent = phase.verse;
-        verseRefEl.textContent = phase.ref;
-        versePanelEl.classList.add('show');
-      }
     }
   }
 
@@ -1307,6 +1396,79 @@
       dbgThicknessVal.textContent = thicknessMul.toFixed(1) + '×';
     });
   }
+
+  // ---- user-editable verse: fixed text, independent of taps/scene, persisted ----
+  const VERSE_KEY = 'god-challenge-verse';
+  const versePanelEl = document.getElementById('verse-panel');
+  const verseTextEl = document.getElementById('verse-text');
+  const verseRefEl = document.getElementById('verse-ref');
+  const verseAddBtn = document.getElementById('verse-add-btn');
+  const verseEditBtn = document.getElementById('verse-edit-btn');
+  const verseRemoveBtn = document.getElementById('verse-remove-btn');
+  const verseForm = document.getElementById('verse-form');
+  const verseFormBackdrop = document.getElementById('verse-form-backdrop');
+  const verseInput = document.getElementById('verse-input');
+  const verseRefInput = document.getElementById('verse-ref-input');
+  const verseSaveBtn = document.getElementById('verse-save-btn');
+  const verseCancelBtn = document.getElementById('verse-cancel-btn');
+
+  let verseState = null;
+  try {
+    const saved = JSON.parse(localStorage.getItem(VERSE_KEY) || 'null');
+    if (saved && saved.text) verseState = saved;
+  } catch (e) {}
+
+  function renderVerse() {
+    const hasVerse = !!(verseState && verseState.text);
+    app.classList.toggle('has-verse', hasVerse);
+    versePanelEl.classList.toggle('show', hasVerse);
+    verseAddBtn.style.display = hasVerse ? 'none' : '';
+    if (hasVerse) {
+      verseTextEl.textContent = verseState.text;
+      verseRefEl.textContent = verseState.ref || '';
+      verseRefEl.style.display = verseState.ref ? '' : 'none';
+    }
+  }
+
+  function openVerseForm() {
+    verseInput.value = (verseState && verseState.text) || '';
+    verseRefInput.value = (verseState && verseState.ref) || '';
+    verseForm.classList.add('show');
+    verseFormBackdrop.classList.add('show');
+    verseInput.focus();
+  }
+
+  function closeVerseForm() {
+    verseForm.classList.remove('show');
+    verseFormBackdrop.classList.remove('show');
+  }
+
+  function saveVerse() {
+    const text = verseInput.value.trim();
+    if (!text) { closeVerseForm(); return; }
+    verseState = { text, ref: verseRefInput.value.trim() };
+    try { localStorage.setItem(VERSE_KEY, JSON.stringify(verseState)); } catch (e) {}
+    renderVerse();
+    closeVerseForm();
+  }
+
+  function removeVerse() {
+    verseState = null;
+    try { localStorage.removeItem(VERSE_KEY); } catch (e) {}
+    renderVerse();
+  }
+
+  renderVerse();
+
+  [verseAddBtn, verseEditBtn, verseRemoveBtn, verseSaveBtn, verseCancelBtn, verseForm].forEach((el) => {
+    el.addEventListener('click', (e) => e.stopPropagation());
+  });
+  verseAddBtn.addEventListener('click', openVerseForm);
+  verseEditBtn.addEventListener('click', openVerseForm);
+  verseRemoveBtn.addEventListener('click', removeVerse);
+  verseSaveBtn.addEventListener('click', saveVerse);
+  verseCancelBtn.addEventListener('click', closeVerseForm);
+  verseFormBackdrop.addEventListener('click', closeVerseForm);
 
   app.addEventListener('click', increment);
 
