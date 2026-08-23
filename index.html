@@ -121,6 +121,25 @@
     font-weight: 600;
   }
 
+  #phase {
+    margin-top: 6px;
+    font-size: clamp(11px, 1.4vmin, 13px);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-weight: 700;
+    background: linear-gradient(135deg, #c4b5fd, #67e8f9);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    opacity: 0;
+    transform: translateY(2px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  #phase.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
   #reset {
     position: fixed;
     bottom: 40px;
@@ -277,6 +296,7 @@
     <div id="core">
       <div id="count">0</div>
       <div id="hint">tap anywhere</div>
+      <div id="phase"></div>
     </div>
   </div>
 </div>
@@ -285,13 +305,48 @@
 <button id="reset">Reset <kbd>R</kbd></button>
 
 <script>
+  const STORAGE_KEY = 'god-challenge-count';
   let count = 0;
+  try {
+    const saved = parseInt(localStorage.getItem(STORAGE_KEY), 10);
+    if (Number.isFinite(saved) && saved >= 0) count = Math.min(saved, 100);
+  } catch (e) {}
+
   const countEl = document.getElementById('count');
   const app = document.getElementById('app');
   const resetBtn = document.getElementById('reset');
   const progressEl = document.querySelector('#ring .progress');
   const toastEl = document.getElementById('toast');
+  const phaseEl = document.getElementById('phase');
   const CIRC = 1256; // 2 * PI * 200, matches stroke-dasharray
+
+  const PHASES = [
+    { max: 25, label: 'Imagining' },
+    { max: 50, label: 'Musing' },
+    { max: 75, label: 'Muttering' },
+    { max: 100, label: 'Manifesting' },
+  ];
+  function phaseForCount(c) {
+    return PHASES.find((p) => c <= p.max) || PHASES[PHASES.length - 1];
+  }
+  let lastPhaseLabel = null;
+  function updatePhase() {
+    const phase = phaseForCount(count);
+    if (phase.label !== lastPhaseLabel) {
+      lastPhaseLabel = phase.label;
+      phaseEl.textContent = phase.label;
+      phaseEl.classList.remove('show');
+      void phaseEl.offsetWidth;
+      phaseEl.classList.add('show');
+    }
+  }
+
+  const MILESTONES = {
+    25: 'Imagining takes root 🌱',
+    50: 'Musing deepens the current 🌊',
+    75: 'Muttering becomes conviction 🔥',
+    100: '🎉 Manifesting — 100 taps reached!',
+  };
   let audioCtx = null;
   function getAudioCtx() {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -308,6 +363,9 @@
     const pct = Math.min(count / 100, 1);
     progressEl.style.strokeDashoffset = CIRC * (1 - pct);
     setRootProgress(pct);
+    updatePhase();
+
+    try { localStorage.setItem(STORAGE_KEY, String(count)); } catch (e) {}
   }
 
   // ---- Root / ember background engine (canvas) ----
@@ -607,9 +665,10 @@
     requestAnimationFrame(tick);
   }
 
-  function showToast() {
+  function showToast(message) {
+    if (message) toastEl.textContent = message;
     toastEl.classList.add('show');
-    setTimeout(() => toastEl.classList.remove('show'), 2200);
+    setTimeout(() => toastEl.classList.remove('show'), 2600);
   }
 
   function playAlertSound() {
@@ -654,16 +713,23 @@
     count++;
     updateDisplay();
     playTapSound();
-    if (count === 100) {
+    if (MILESTONES[count]) {
       playAlertSound();
-      showToast();
+      showToast(MILESTONES[count]);
     }
   }
 
   function reset() {
     count = 0;
+    lastPhaseLabel = null;
     updateDisplay();
   }
+
+  // sync UI with any restored count, without the tap pulse/sound
+  countEl.textContent = count;
+  progressEl.style.strokeDashoffset = CIRC * (1 - Math.min(count / 100, 1));
+  setRootProgress(Math.min(count / 100, 1));
+  updatePhase();
 
   app.addEventListener('click', increment);
 
