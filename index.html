@@ -1391,12 +1391,12 @@
   // ---- gold nuggets pouring out from the temple and drifting downstream ----
   const stoneGroup = new THREE.Group();
   scene.add(stoneGroup);
-  const STONE_COUNT = 42;
+  const STONE_COUNT = 72; // more gold generated from the temple
   const stones = [];
   for (let i = 0; i < STONE_COUNT; i++) {
     // biased toward u≈0 so the visible population reads as emerging from the
     // temple gate and spreading outward, not scattered evenly with no source
-    const u = Math.random() * Math.random() * 0.7;
+    const u = Math.random() * Math.random() * 0.5;
     const size = 3.5 + Math.random() * 8;
     const geo = makeNuggetGeometry(size);
     const mat = new THREE.MeshStandardMaterial({
@@ -1411,7 +1411,7 @@
       mesh, size,
       u,
       offsetFrac: (Math.random() - 0.5) * 0.75,
-      driftSpeed: 0.00002 + Math.random() * 0.00004,
+      driftSpeed: 0.000034 + Math.random() * 0.00007, // faster current carrying the nuggets
       phase: Math.random() * Math.PI * 2,
     });
   }
@@ -1494,16 +1494,16 @@
   gateLight.position.set(spiritGate.group.position.x, 55, spiritGate.group.position.z);
 
   // ---- golden motes drifting downstream ----
-  const MOTE_COUNT = 140;
+  const MOTE_COUNT = 220; // more gold generated pouring from the temple
   const moteGeo = new THREE.BufferGeometry();
   const motePos = new Float32Array(MOTE_COUNT * 3);
   const moteU = new Float32Array(MOTE_COUNT);
   const moteOffset = new Float32Array(MOTE_COUNT);
   const moteSpeed = new Float32Array(MOTE_COUNT);
   for (let i = 0; i < MOTE_COUNT; i++) {
-    moteU[i] = Math.random() * Math.random(); // biased near the temple so they visibly pour out of it
+    moteU[i] = Math.random() * Math.random() * 0.6; // biased near the temple so they visibly pour out of it
     moteOffset[i] = (Math.random() - 0.5) * 1.4;
-    moteSpeed[i] = 0.00006 + Math.random() * 0.00012;
+    moteSpeed[i] = 0.0001 + Math.random() * 0.0002; // faster current
   }
   moteGeo.setAttribute('position', new THREE.BufferAttribute(motePos, 3));
   function moteSprite() {
