@@ -797,8 +797,24 @@
       /* kept well clear of the fixed Reset pill at the bottom — long verses
          scroll inside the panel itself (#verse-scroll) rather than pushing the
          panel's bottom edge under Reset */
-      max-height: 34vh;
-      margin-bottom: 90px;
+      max-height: 40vh;
+      margin-bottom: 30px;
+      /* less wasted padding so more of the verse fits on a narrow screen */
+      padding: 16px 18px;
+      max-width: 94vw;
+    }
+    #verse-actions {
+      margin-top: 12px;
+    }
+    #reset {
+      bottom: 20px;
+      padding: 9px 18px;
+      font-size: 13px;
+      gap: 6px;
+    }
+    #reset kbd {
+      padding: 1px 5px;
+      font-size: 10px;
     }
     #river-debug {
       top: auto;
