@@ -624,12 +624,8 @@
     pointer-events: none;
     transition: background 0.15s ease, color 0.15s ease, opacity 0.4s ease;
   }
-  /* hidden until a shake gesture reveals it (see the devicemotion listener) —
-     desktop doesn't need it since the C key opens the panel directly */
-  #debug-toggle-btn.revealed {
-    opacity: 1;
-    pointer-events: auto;
-  }
+  /* hidden on desktop (the C key opens the panel there); shown only on phones,
+     via the max-width override at the end of the stylesheet */
   #debug-toggle-btn:hover, #debug-toggle-btn.active {
     color: #fff;
     background: rgba(255,255,255,0.12);
@@ -812,6 +808,10 @@
       width: auto;
       max-height: 60vh;
       overflow-y: auto;
+    }
+    #debug-toggle-btn {
+      opacity: 1;
+      pointer-events: auto;
     }
   }
 </style>
@@ -2110,16 +2110,6 @@
   document.addEventListener('click', function once() {
     if (!document.fullscreenElement) requestFullscreen();
   }, { once: false });
-
-  // iOS gates devicemotion behind an explicit permission prompt that can only be
-  // triggered from a user gesture — piggyback on the very first tap so the shake
-  // gesture (see the devicemotion listener below) works without a visible ask
-  document.addEventListener('click', function requestMotionPermissionOnce() {
-    if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-      DeviceMotionEvent.requestPermission().catch(() => {});
-    }
-    document.removeEventListener('click', requestMotionPermissionOnce);
-  }, { once: true });
 </script>
 
 <script type="module">
@@ -2616,25 +2606,6 @@
     if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey) {
       setDebugVisible(!debugPanel.classList.contains('show'));
     }
-  });
-
-  // shake the phone to reveal the hidden scene-controls button — there's no
-  // keyboard on mobile to press "C" with
-  let lastShakeAccel = null;
-  let lastShakeTime = 0;
-  const SHAKE_THRESHOLD = 18; // m/s² of jerk between samples
-  window.addEventListener('devicemotion', (e) => {
-    const a = e.accelerationIncludingGravity;
-    if (!a || a.x === null) return;
-    const now = Date.now();
-    if (lastShakeAccel) {
-      const delta = Math.abs(a.x - lastShakeAccel.x) + Math.abs(a.y - lastShakeAccel.y) + Math.abs(a.z - lastShakeAccel.z);
-      if (delta > SHAKE_THRESHOLD && now - lastShakeTime > 1000) {
-        lastShakeTime = now;
-        debugToggleBtn.classList.add('revealed');
-      }
-    }
-    lastShakeAccel = { x: a.x, y: a.y, z: a.z };
   });
 
   const dbgCount = document.getElementById('dbg-count');
