@@ -379,6 +379,37 @@
     background: rgba(255,255,255,0.12);
     color: #fff;
   }
+  #verse-mic-btn.listening {
+    background: rgba(124, 58, 237, 0.35);
+    border-color: rgba(196, 181, 253, 0.6);
+    color: #fff;
+  }
+  .verse-word {
+    transition: color 0.25s ease, text-shadow 0.25s ease;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .verse-word:hover {
+    background: rgba(255,255,255,0.08);
+  }
+  .verse-word.said {
+    color: #fff;
+    text-shadow: 0 0 10px rgba(196, 181, 253, 0.95), 0 0 22px rgba(124, 58, 237, 0.8);
+  }
+  .verse-word.confirm-pending {
+    animation: confirmPulse 1s ease-in-out infinite;
+  }
+  @keyframes confirmPulse {
+    0%, 100% { text-shadow: 0 0 10px rgba(196, 181, 253, 0.95), 0 0 22px rgba(124, 58, 237, 0.8); }
+    50% { text-shadow: 0 0 4px rgba(196, 181, 253, 0.4); }
+  }
+  #verse-heard {
+    margin-top: 10px;
+    font-size: 11px;
+    font-style: normal;
+    color: rgba(255,255,255,0.4);
+    min-height: 14px;
+  }
 
   #verse-add-btn {
     position: fixed;
@@ -766,9 +797,11 @@
       <div id="verse-ref"></div>
     </div>
     <div id="verse-actions">
+      <button type="button" id="verse-mic-btn">🎙 Affirm</button>
       <button type="button" id="verse-edit-btn">Edit</button>
       <button type="button" id="verse-remove-btn">Remove</button>
     </div>
+    <div id="verse-heard"></div>
   </div>
 </div>
 
@@ -1483,6 +1516,8 @@
   const verseRefInput = document.getElementById('verse-ref-input');
   const verseSaveBtn = document.getElementById('verse-save-btn');
   const verseCancelBtn = document.getElementById('verse-cancel-btn');
+  const verseMicBtn = document.getElementById('verse-mic-btn');
+  const verseHeardEl = document.getElementById('verse-heard');
 
   const DEFAULT_VERSE = {
     text: `कि हमारे प्रभु यीशु मसीह का परमेश्‍वर जो महिमा का पिता है, तुम्हें अपनी पहचान में ज्ञान और प्रकाश की आत्मा दे,
@@ -1578,7 +1613,20 @@
   }
 
   // lines starting with "-" render as bullet points; everything else stays a plain line
+  // words matched so far are tracked by index into this flat list; wordSpans()
+  // rebuilds it after each render since renderVerseLines assigns data-widx
+  let verseWordCount = 0;
+
+  function wrapWords(text) {
+    return text.split(/(\s+)/).map((tok) => {
+      if (!tok.trim()) return tok;
+      const idx = verseWordCount++;
+      return `<span class="verse-word" data-widx="${idx}">${escapeHtml(tok)}</span>`;
+    }).join('');
+  }
+
   function renderVerseLines(text) {
+    verseWordCount = 0;
     const records = text.split('\n').map((line) => {
       const trimmed = line.trim();
       const isBullet = /^-\s+/.test(trimmed) || trimmed === '-';
@@ -1595,10 +1643,10 @@
     records.forEach((r) => {
       if (r.isBullet) {
         if (!inList) { html += '<ul class="verse-list">'; inList = true; }
-        html += `<li>${escapeHtml(r.text)}</li>`;
+        html += `<li>${wrapWords(r.text)}</li>`;
       } else {
         if (inList) { html += '</ul>'; inList = false; }
-        html += `<div class="verse-line">${escapeHtml(r.text) || '&nbsp;'}</div>`;
+        html += `<div class="verse-line">${r.text.trim() ? wrapWords(r.text) : '&nbsp;'}</div>`;
       }
     });
     if (inList) html += '</ul>';
@@ -1614,7 +1662,10 @@
       verseTextEl.innerHTML = renderVerseLines(verseState.text);
       verseRefEl.textContent = verseState.ref || '';
       verseRefEl.style.display = verseState.ref ? '' : 'none';
+    } else {
+      stopAffirming();
     }
+    resetAffirmProgress();
   }
 
   function openVerseForm() {
@@ -1644,6 +1695,208 @@
     try { localStorage.removeItem(VERSE_KEY); } catch (e) {}
     renderVerse();
   }
+
+  // ---- speech-to-text affirmation: on-device recognition only (no external API) ----
+  // as the verse is spoken aloud, matched words glow; finishing the whole verse
+  // counts as a tap. Uses the browser's built-in SpeechRecognition (Web Speech API),
+  // which on Safari/Mac and Chrome runs through the OS/browser's own speech engine.
+  const SpeechRecognitionImpl = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null;
+  let listening = false;
+  let matchedCount = 0;
+  let pendingConfirm = false; // whole verse spoken once; waiting for the last word to be repeated
+  let awaitingReset = false; // just confirmed — ignore further results until the flash clears
+
+  function normalizeWord(w) {
+    return w.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+  }
+
+  function expectedWords() {
+    return Array.from(verseTextEl.querySelectorAll('.verse-word'))
+      .map((el) => normalizeWord(el.textContent));
+  }
+
+  function resetAffirmProgress() {
+    matchedCount = 0;
+    pendingConfirm = false;
+    verseTextEl.querySelectorAll('.verse-word.said, .verse-word.confirm-pending')
+      .forEach((el) => el.classList.remove('said', 'confirm-pending'));
+  }
+
+  function applyAffirmProgress() {
+    const spans = verseTextEl.querySelectorAll('.verse-word');
+    spans.forEach((el, i) => el.classList.toggle('said', i < matchedCount));
+  }
+
+  // aligns the freshly transcribed spoken words against the words still left to
+  // affirm, tolerating a few misheard/filler words rather than requiring an exact
+  // match. If a word doesn't line up, this also looks ahead into the verse itself
+  // for the next place the spoken word actually occurs and jumps (glows) straight
+  // to it — safe to be this lenient because nothing counts as a tap until the
+  // last word is confirmed by saying (or tapping) it a second time.
+  function advanceAffirmation(spokenWords) {
+    if (awaitingReset) return; // just confirmed a tap — ignore stray results until the flash clears
+    const expected = expectedWords();
+    if (!expected.length) return;
+
+    // the whole verse was already spoken once — the only thing left is hearing
+    // the last word again as a deliberate confirmation before it counts
+    if (pendingConfirm) {
+      if (spokenWords.includes(expected[expected.length - 1])) commitAffirmation();
+      return;
+    }
+
+    const LOOKAHEAD = 6;
+    let ei = matchedCount;
+    let si = 0;
+    while (ei < expected.length && si < spokenWords.length) {
+      if (spokenWords[si] === expected[ei]) { ei++; si++; continue; }
+      let foundInSpoken = -1;
+      for (let k = si + 1; k < Math.min(spokenWords.length, si + LOOKAHEAD); k++) {
+        if (spokenWords[k] === expected[ei]) { foundInSpoken = k; break; }
+      }
+      if (foundInSpoken !== -1) { si = foundInSpoken + 1; ei++; continue; }
+      let foundInExpected = -1;
+      for (let k = ei + 1; k < Math.min(expected.length, ei + LOOKAHEAD); k++) {
+        if (expected[k] === spokenWords[si]) { foundInExpected = k; break; }
+      }
+      if (foundInExpected !== -1) { ei = foundInExpected + 1; si++; continue; }
+      si++;
+    }
+    matchedCount = ei;
+    applyAffirmProgress();
+    if (matchedCount >= expected.length) {
+      enterPendingConfirm();
+      // the repeat may already be sitting right there in this same batch of words
+      if (spokenWords.slice(si).includes(expected[expected.length - 1])) commitAffirmation();
+    }
+  }
+
+  // verse fully spoken once — hold here glowing the last word until it's said
+  // (or tapped) again, so a single read-through doesn't silently count as a tap
+  function enterPendingConfirm() {
+    if (pendingConfirm) return;
+    pendingConfirm = true;
+    const spans = verseTextEl.querySelectorAll('.verse-word');
+    if (spans.length) spans[spans.length - 1].classList.add('confirm-pending');
+    verseHeardEl.textContent = 'say the last word once more to confirm';
+  }
+
+  function commitAffirmation() {
+    if (awaitingReset) return;
+    pendingConfirm = false;
+    awaitingReset = true;
+    increment();
+    playAlertSound();
+    showToast('Verse affirmed 🙏');
+    setTimeout(() => {
+      resetAffirmProgress();
+      awaitingReset = false;
+      if (listening) restartRecognitionSession();
+    }, 900);
+  }
+
+  // also used when the user manually taps a word to catch up progress that the
+  // speech recognizer missed
+  function checkAffirmCompletion() {
+    const expected = expectedWords();
+    if (expected.length && matchedCount >= expected.length) enterPendingConfirm();
+  }
+
+  // clicking a word directly sets progress up to (or back to) that word, for when
+  // the recognizer mis-hears or drops a word and the glow needs a manual nudge.
+  // tapping the last word again while pending confirms the whole verse.
+  function onVerseWordClick(e) {
+    const wordEl = e.target.closest('.verse-word');
+    if (!wordEl) return;
+    e.stopPropagation();
+    if (awaitingReset) return;
+    const idx = parseInt(wordEl.dataset.widx, 10);
+    const expected = expectedWords();
+    if (pendingConfirm && idx === expected.length - 1) { commitAffirmation(); return; }
+    matchedCount = idx < matchedCount ? idx : idx + 1;
+    applyAffirmProgress();
+    checkAffirmCompletion();
+  }
+
+  function restartRecognitionSession() {
+    if (!recognition) return;
+    try { recognition.stop(); } catch (e) {}
+    // onend will restart it if `listening` is still true
+  }
+
+  // guess a recognition locale from the verse's script since the affirmation
+  // has to be spoken in whatever language the saved verse is actually in
+  function guessVerseLang() {
+    const text = (verseState && verseState.text) || '';
+    if (/[ऀ-ॿ]/.test(text)) return 'hi-IN'; // Devanagari (Hindi)
+    if (/[؀-ۿ]/.test(text)) return 'ar-SA'; // Arabic
+    if (/[一-鿿]/.test(text)) return 'zh-CN'; // CJK
+    return navigator.language || 'en-US';
+  }
+
+  function createRecognition() {
+    const rec = new SpeechRecognitionImpl();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = guessVerseLang();
+    rec.onresult = (event) => {
+      let words = [];
+      let heard = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        heard = transcript;
+        words = words.concat(transcript.trim().split(/\s+/).filter(Boolean).map(normalizeWord));
+      }
+      verseHeardEl.textContent = heard ? `heard: "${heard.trim()}"` : '';
+      if (words.length) advanceAffirmation(words);
+    };
+    rec.onerror = (event) => {
+      console.warn('[affirm] recognition error:', event.error);
+      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+        verseHeardEl.textContent = 'mic permission denied';
+        stopAffirming();
+      } else if (event.error !== 'aborted') {
+        verseHeardEl.textContent = `mic error: ${event.error}`;
+      }
+    };
+    rec.onend = () => {
+      if (listening) {
+        try { rec.start(); } catch (e) {}
+      }
+    };
+    return rec;
+  }
+
+  function startAffirming() {
+    if (!SpeechRecognitionImpl || !(verseState && verseState.text)) return;
+    getAudioCtx(); // warm up audio now, on a real click, so the tap sound isn't muted later when a confirm fires from a speech callback
+    listening = true;
+    verseMicBtn.classList.add('listening');
+    verseHeardEl.textContent = 'listening…';
+    resetAffirmProgress();
+    recognition = createRecognition();
+    try { recognition.start(); } catch (e) {}
+  }
+
+  function stopAffirming() {
+    listening = false;
+    verseMicBtn.classList.remove('listening');
+    verseHeardEl.textContent = '';
+    if (recognition) { try { recognition.stop(); } catch (e) {} }
+    resetAffirmProgress();
+  }
+
+  if (!SpeechRecognitionImpl) {
+    verseMicBtn.style.display = 'none';
+  } else {
+    verseMicBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (listening) stopAffirming(); else startAffirming();
+    });
+  }
+
+  verseTextEl.addEventListener('click', onVerseWordClick);
 
   renderVerse();
 
