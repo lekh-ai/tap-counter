@@ -1242,6 +1242,74 @@
   scene.add(new THREE.Mesh(buildBankGeometry(1), rockMat));
   scene.add(new THREE.Mesh(buildBankGeometry(-1), rockMat));
 
+  // a soft, irregular foam texture along both banks — without this the water
+  // meets the rock in one hard geometric line, which reads as fake
+  function makeFoamTexture() {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 256;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, 128, 256);
+    for (let i = 0; i < 500; i++) {
+      const v = Math.random();
+      const bias = Math.pow(Math.random(), 1.8); // most blobs cluster near the water edge (v small)
+      const y = bias * 256;
+      const x = Math.random() * 128;
+      const r = 2 + Math.random() * 7;
+      const alpha = (1 - bias) * (0.35 + Math.random() * 0.4);
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(235, 240, 255, ${alpha})`;
+      ctx.fill();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.flipY = false; // keep v=0 (canvas top, where blobs are biased) mapped to the water-side edge
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.repeat.set(16, 1);
+    return tex;
+  }
+  const foamTexture = makeFoamTexture();
+
+  function buildFoamGeometry(side) {
+    const SEG = 140;
+    const positions = [], uvs = [];
+    const centers = [];
+    for (let i = 0; i <= SEG; i++) {
+      const u = i / SEG;
+      centers.push({ u, ...pathXZ(u), hw: pathHalfWidth(u) });
+    }
+    for (let i = 0; i <= SEG; i++) {
+      const c = centers[i];
+      const prev = centers[Math.max(0, i - 1)];
+      const next = centers[Math.min(SEG, i + 1)];
+      let tx = next.x - prev.x, tz = next.z - prev.z;
+      const tl = Math.hypot(tx, tz) || 1;
+      tx /= tl; tz /= tl;
+      const px = -tz, pz = tx;
+      const innerR = c.hw - 6;
+      const outerR = c.hw + 16;
+      positions.push(c.x + px * side * innerR, 0.4, c.z + pz * side * innerR);
+      positions.push(c.x + px * side * outerR, 0.4, c.z + pz * side * outerR);
+      uvs.push(c.u * 16, 0, c.u * 16, 1);
+    }
+    const indices = [];
+    for (let i = 0; i < SEG; i++) {
+      const a = i * 2, b = i * 2 + 1, cIdx = (i + 1) * 2, d = (i + 1) * 2 + 1;
+      indices.push(a, cIdx, b, b, cIdx, d);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    geo.computeVertexNormals();
+    return geo;
+  }
+  const foamMat = new THREE.MeshBasicMaterial({
+    map: foamTexture, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+  });
+  scene.add(new THREE.Mesh(buildFoamGeometry(1), foamMat));
+  scene.add(new THREE.Mesh(buildFoamGeometry(-1), foamMat));
+
   function buildRiverGeometry() {
     const SEG = 140;
     const positions = [], normals = [], uvs = [];
