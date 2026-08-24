@@ -710,6 +710,93 @@
     color: rgba(255,255,255,0.4);
     line-height: 1.5;
   }
+  #river-debug input[type="text"] {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    color: #fff;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 8px;
+    box-sizing: border-box;
+  }
+  #river-debug button {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: inherit;
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.16);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+  #river-debug button:hover {
+    background: rgba(255,255,255,0.16);
+  }
+  #river-debug .checkbox-row {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+  #river-debug .checkbox-row input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    accent-color: #7c3aed;
+    cursor: pointer;
+  }
+  #river-debug .checkbox-row span {
+    color: rgba(255,255,255,0.75);
+    font-weight: 600;
+  }
+
+  /* ---- background YouTube scene ---- */
+  #bg-youtube {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    background: #000;
+    display: none;
+    pointer-events: none;
+  }
+  /* the iframe is deliberately oversized and centered by JS to always cover the
+     viewport (object-fit doesn't apply to iframes), with native controls off —
+     playback is driven entirely by our own controls/keyboard shortcuts */
+  #yt-player-target {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  #yt-player-target iframe {
+    pointer-events: none;
+  }
+  #yt-gradient-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      linear-gradient(to bottom, rgba(10, 8, 16, 0.75) 0%, rgba(10, 8, 16, 0) 22%),
+      linear-gradient(to top, rgba(10, 8, 16, 0.8) 0%, rgba(10, 8, 16, 0) 30%),
+      linear-gradient(120deg, rgba(124, 58, 237, 0.22), rgba(6, 182, 212, 0.16));
+    transition: opacity 0.3s ease;
+  }
+  #yt-gradient-overlay.hidden {
+    opacity: 0;
+  }
+  #bg-youtube.yt-fullscreen {
+    z-index: 40;
+  }
+  #bg-youtube.yt-fullscreen #yt-gradient-overlay {
+    opacity: 0.3;
+  }
 
   /* floating cosmic / angelic symbols */
   #symbols {
@@ -845,6 +932,10 @@
 <div class="realm physical"><span>Physical</span></div>
 <canvas id="bg-canvas"></canvas>
 <canvas id="bg-webgl"></canvas>
+<div id="bg-youtube">
+  <div id="yt-player-target"></div>
+  <div id="yt-gradient-overlay"></div>
+</div>
 <button type="button" id="debug-toggle-btn" title="Scene controls" aria-label="Scene controls">⚙</button>
 <div id="river-debug">
   <h4>Scene Controls</h4>
@@ -882,6 +973,22 @@
     <label><span>Branch thickness</span><span id="dbg-thickness-val">1.0×</span></label>
     <input type="range" id="dbg-thickness" min="0.3" max="2.5" step="0.1" value="1">
     <div class="hint">Press C or tap ⚙ to hide</div>
+  </div>
+  <div id="youtube-ctrl-group" style="display:none;">
+    <label><span>Video or playlist URL</span><span></span></label>
+    <input type="text" id="yt-url-input" placeholder="https://youtube.com/watch?v=...">
+    <button type="button" id="yt-load-btn">Load</button>
+    <label style="margin-top:12px;"><span>Volume</span><span id="yt-volume-val">70%</span></label>
+    <input type="range" id="yt-volume" min="0" max="100" step="1" value="70">
+    <label class="checkbox-row"><input type="checkbox" id="yt-captions"><span>Captions</span></label>
+    <label class="checkbox-row"><input type="checkbox" id="yt-gradient" checked><span>Gradient overlay</span></label>
+    <label><span>Repeat</span><span></span></label>
+    <select id="yt-repeat">
+      <option value="off">Off</option>
+      <option value="video">Loop video</option>
+      <option value="playlist">Loop playlist</option>
+    </select>
+    <div class="hint">Space: play/pause · ←/→: seek 10s<br>M: mute · F: fullscreen · Press C or tap ⚙ to hide</div>
   </div>
 </div>
 <div id="symbols"></div>
@@ -936,6 +1043,7 @@
 <div id="scene-toggle">
   <button type="button" data-scene="branches">Branches</button>
   <button type="button" data-scene="river">River</button>
+  <button type="button" data-scene="youtube">Video</button>
 </div>
 <button id="reset">Reset <kbd>R</kbd></button>
 <div id="volume">
@@ -1104,12 +1212,14 @@
   function lerp(a, b, t) { return a + (b - a) * t; }
   function clamp01(v) { return Math.max(0, Math.min(1, v)); }
 
-  // ---- Scene toggle: "branches" (root network) vs "river" (temple river) ----
+  // ---- Scene toggle: "branches" (root network), "river" (temple river), or
+  // "youtube" (background video/playlist) ----
   const SCENE_KEY = 'god-challenge-scene';
+  const SCENES = ['branches', 'river', 'youtube'];
   let currentScene = 'branches';
   try {
     const savedScene = localStorage.getItem(SCENE_KEY);
-    if (savedScene === 'branches' || savedScene === 'river') currentScene = savedScene;
+    if (SCENES.includes(savedScene)) currentScene = savedScene;
   } catch (e) {}
 
   const spiritColor = [124, 58, 237];
@@ -1474,7 +1584,7 @@
   }
 
   // the floating angelic/cosmic symbols and realm labels are a "branches" scene
-  // motif only — the river scene has no such manifesting/realm attribute
+  // motif only — the river and youtube scenes have no such manifesting/realm attribute
   function applySceneChrome(scene) {
     const show = scene === 'branches' ? '' : 'none';
     document.querySelectorAll('.realm').forEach((el) => { el.style.display = show; });
@@ -1483,19 +1593,31 @@
 
     const canvas2d = document.getElementById('bg-canvas');
     const canvasGl = document.getElementById('bg-webgl');
+    const bgYoutube = document.getElementById('bg-youtube');
     if (canvas2d) canvas2d.style.display = scene === 'branches' ? 'block' : 'none';
     if (canvasGl) canvasGl.style.display = scene === 'river' ? 'block' : 'none';
+    if (bgYoutube) bgYoutube.style.display = scene === 'youtube' ? 'block' : 'none';
 
-    // swap which half of the debug panel (C) is shown — the settings underneath
-    // are untouched, so nothing resets when switching scenes or toggling the panel
+    if (scene === 'youtube') {
+      if (ytPlayer && typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
+      else ensureYoutubeReady();
+    } else if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
+      ytPlayer.pauseVideo();
+    }
+
+    // swap which section of the debug panel (C) is shown — the settings
+    // underneath are untouched, so nothing resets when switching scenes or
+    // toggling the panel
     const riverGroup = document.getElementById('river-ctrl-group');
     const branchesGroup = document.getElementById('branches-ctrl-group');
+    const youtubeGroup = document.getElementById('youtube-ctrl-group');
     if (riverGroup) riverGroup.style.display = scene === 'river' ? '' : 'none';
     if (branchesGroup) branchesGroup.style.display = scene === 'branches' ? '' : 'none';
+    if (youtubeGroup) youtubeGroup.style.display = scene === 'youtube' ? '' : 'none';
   }
 
   function setScene(scene) {
-    if (scene !== 'branches' && scene !== 'river') return;
+    if (!SCENES.includes(scene)) return;
     currentScene = scene;
     try { localStorage.setItem(SCENE_KEY, scene); } catch (e) {}
     document.querySelectorAll('#scene-toggle button').forEach((btn) => {
@@ -1504,6 +1626,194 @@
     applySceneChrome(scene);
     renderScene(0);
   }
+
+  // ---- YouTube background scene: a video or playlist plays behind the app,
+  // controlled entirely via the settings panel and keyboard (no on-screen
+  // player controls, matching the app's own minimal chrome) ----
+  const YT_KEY = 'god-challenge-youtube';
+  let ytState = { url: 'https://www.youtube.com/watch?v=kxnaCvaAc_A', volume: 70, captions: false, gradient: true, repeat: 'off' };
+  try {
+    const savedYt = JSON.parse(localStorage.getItem(YT_KEY) || 'null');
+    if (savedYt) ytState = Object.assign(ytState, savedYt);
+  } catch (e) {}
+
+  function saveYtState() {
+    try { localStorage.setItem(YT_KEY, JSON.stringify(ytState)); } catch (e) {}
+  }
+
+  // accepts watch, youtu.be, shorts, and playlist URLs and pulls out whichever
+  // ids are present so either a lone video or a full playlist can be cued
+  function parseYoutubeUrl(url) {
+    try {
+      const u = new URL(url.trim());
+      const videoId = u.searchParams.get('v')
+        || (u.hostname.includes('youtu.be') ? u.pathname.slice(1) : null)
+        || (u.pathname.startsWith('/shorts/') ? u.pathname.split('/')[2] : null);
+      const playlistId = u.searchParams.get('list');
+      return { videoId: videoId || null, playlistId: playlistId || null };
+    } catch (e) {
+      return { videoId: null, playlistId: null };
+    }
+  }
+
+  let ytPlayer = null;
+  let ytApiLoading = false;
+
+  function ensureYoutubeReady() {
+    if (ytPlayer || ytApiLoading) return;
+    ytApiLoading = true;
+    if (window.YT && window.YT.Player) {
+      createYtPlayer();
+      return;
+    }
+    window.onYouTubeIframeAPIReady = createYtPlayer;
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+  }
+
+  function createYtPlayer() {
+    const { videoId, playlistId } = parseYoutubeUrl(ytState.url);
+    const playerVars = {
+      controls: 0, disablekb: 1, modestbranding: 1, rel: 0, iv_load_policy: 3,
+      cc_load_policy: ytState.captions ? 1 : 0,
+      playsinline: 1, autoplay: 1,
+    };
+    if (playlistId) { playerVars.listType = 'playlist'; playerVars.list = playlistId; }
+    ytPlayer = new YT.Player('yt-player-target', {
+      width: '100%', height: '100%',
+      videoId: videoId || undefined,
+      playerVars,
+      events: {
+        onReady: (e) => {
+          e.target.setVolume(ytState.volume);
+          resizeYoutubeIframe();
+        },
+        onStateChange: (e) => {
+          if (e.data !== YT.PlayerState.ENDED) return;
+          if (ytState.repeat === 'video') {
+            e.target.seekTo(0); e.target.playVideo();
+          } else if (ytState.repeat === 'playlist' && e.target.getPlaylist && e.target.getPlaylist()) {
+            e.target.playVideoAt(0);
+          }
+        },
+      },
+    });
+  }
+
+  // the iframe can't use object-fit, so it's oversized to always cover the
+  // viewport at a 16:9 aspect and centered — the same trick a CSS background-
+  // video would use with object-fit: cover
+  function resizeYoutubeIframe() {
+    const target = document.getElementById('yt-player-target');
+    if (!target) return;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const targetRatio = 16 / 9;
+    const viewportRatio = vw / vh;
+    let w, h;
+    if (viewportRatio > targetRatio) { w = vw; h = vw / targetRatio; }
+    else { h = vh; w = vh * targetRatio; }
+    target.style.width = w + 'px';
+    target.style.height = h + 'px';
+  }
+  window.addEventListener('resize', resizeYoutubeIframe);
+
+  function loadYoutubeUrl(url) {
+    ytState.url = url;
+    saveYtState();
+    const { videoId, playlistId } = parseYoutubeUrl(url);
+    if (!videoId && !playlistId) return;
+    if (!ytPlayer) { ensureYoutubeReady(); return; }
+    if (playlistId) ytPlayer.loadPlaylist({ list: playlistId, listType: 'playlist' });
+    else if (videoId) ytPlayer.cueVideoById(videoId);
+  }
+
+  const ytUrlInput = document.getElementById('yt-url-input');
+  const ytLoadBtn = document.getElementById('yt-load-btn');
+  const ytVolumeSlider = document.getElementById('yt-volume');
+  const ytVolumeVal = document.getElementById('yt-volume-val');
+  const ytCaptionsBox = document.getElementById('yt-captions');
+  const ytGradientBox = document.getElementById('yt-gradient');
+  const ytRepeatSelect = document.getElementById('yt-repeat');
+  const ytGradientOverlay = document.getElementById('yt-gradient-overlay');
+
+  if (ytUrlInput) ytUrlInput.value = ytState.url;
+  if (ytVolumeSlider) ytVolumeSlider.value = ytState.volume;
+  if (ytVolumeVal) ytVolumeVal.textContent = ytState.volume + '%';
+  if (ytCaptionsBox) ytCaptionsBox.checked = ytState.captions;
+  if (ytGradientBox) ytGradientBox.checked = ytState.gradient;
+  if (ytRepeatSelect) ytRepeatSelect.value = ytState.repeat;
+  if (ytGradientOverlay) ytGradientOverlay.classList.toggle('hidden', !ytState.gradient);
+
+  if (ytLoadBtn) ytLoadBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (ytUrlInput && ytUrlInput.value.trim()) loadYoutubeUrl(ytUrlInput.value.trim());
+  });
+  if (ytUrlInput) {
+    ytUrlInput.addEventListener('click', (e) => e.stopPropagation());
+    ytUrlInput.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && ytUrlInput.value.trim()) loadYoutubeUrl(ytUrlInput.value.trim());
+    });
+  }
+  if (ytVolumeSlider) ytVolumeSlider.addEventListener('input', () => {
+    ytState.volume = parseInt(ytVolumeSlider.value, 10);
+    ytVolumeVal.textContent = ytState.volume + '%';
+    saveYtState();
+    if (ytPlayer && ytPlayer.setVolume) ytPlayer.setVolume(ytState.volume);
+  });
+  if (ytCaptionsBox) ytCaptionsBox.addEventListener('change', () => {
+    ytState.captions = ytCaptionsBox.checked;
+    saveYtState();
+    if (ytPlayer && ytPlayer.loadModule) {
+      if (ytState.captions) { ytPlayer.loadModule('captions'); ytPlayer.setOption('captions', 'track', {}); }
+      else ytPlayer.unloadModule('captions');
+    }
+  });
+  if (ytGradientBox) ytGradientBox.addEventListener('change', () => {
+    ytState.gradient = ytGradientBox.checked;
+    saveYtState();
+    if (ytGradientOverlay) ytGradientOverlay.classList.toggle('hidden', !ytState.gradient);
+  });
+  if (ytRepeatSelect) ytRepeatSelect.addEventListener('change', () => {
+    ytState.repeat = ytRepeatSelect.value;
+    saveYtState();
+  });
+  [ytUrlInput, ytLoadBtn, ytVolumeSlider, ytCaptionsBox, ytGradientBox, ytRepeatSelect].forEach((el) => {
+    if (el) el.addEventListener('click', (e) => e.stopPropagation());
+  });
+
+  function isTypingInField() {
+    const el = document.activeElement;
+    return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (currentScene !== 'youtube' || !ytPlayer || isTypingInField()) return;
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();
+      const state = ytPlayer.getPlayerState && ytPlayer.getPlayerState();
+      if (state === YT.PlayerState.PLAYING) ytPlayer.pauseVideo();
+      else ytPlayer.playVideo();
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const delta = e.key === 'ArrowRight' ? 10 : -10;
+      if (ytPlayer.getCurrentTime && ytPlayer.seekTo) {
+        ytPlayer.seekTo(Math.max(0, ytPlayer.getCurrentTime() + delta), true);
+      }
+    } else if (e.key === 'm' || e.key === 'M') {
+      if (ytPlayer.isMuted && ytPlayer.isMuted()) ytPlayer.unMute();
+      else if (ytPlayer.mute) ytPlayer.mute();
+    } else if (e.key === 'f' || e.key === 'F') {
+      const bgYoutube = document.getElementById('bg-youtube');
+      if (!document.fullscreenElement) bgYoutube.requestFullscreen().catch(() => {});
+      else document.exitFullscreen();
+    }
+  });
+  document.addEventListener('fullscreenchange', () => {
+    const bgYoutube = document.getElementById('bg-youtube');
+    if (bgYoutube) bgYoutube.classList.toggle('yt-fullscreen', document.fullscreenElement === bgYoutube);
+  });
 
   function tick(time) {
     progress += (targetProgress - progress) * 0.05;
@@ -2108,7 +2418,7 @@
   });
 
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'r' || e.key === 'R') {
+    if ((e.key === 'r' || e.key === 'R') && !isTypingInField()) {
       reset();
     }
   });
@@ -2619,7 +2929,9 @@
     setDebugVisible(!debugPanel.classList.contains('show'));
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey) {
+    const el = document.activeElement;
+    const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
+    if (e.key.toLowerCase() === 'c' && !e.metaKey && !e.ctrlKey && !typing) {
       setDebugVisible(!debugPanel.classList.contains('show'));
     }
   });
