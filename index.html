@@ -778,6 +778,13 @@
   #yt-player-target iframe {
     pointer-events: none;
   }
+  #yt-bokeh-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
   #yt-gradient-overlay {
     position: absolute;
     inset: 0;
@@ -932,6 +939,7 @@
 <canvas id="bg-webgl"></canvas>
 <div id="bg-youtube">
   <div id="yt-player-target"></div>
+  <canvas id="yt-bokeh-canvas"></canvas>
   <div id="yt-gradient-overlay"></div>
 </div>
 <button type="button" id="debug-toggle-btn" title="Scene controls" aria-label="Scene controls">⚙</button>
@@ -986,6 +994,23 @@
       <option value="off">Off</option>
       <option value="video">Loop video</option>
       <option value="playlist">Loop playlist</option>
+    </select>
+    <label class="checkbox-row" style="margin-top:14px;"><input type="checkbox" id="yt-bokeh-visible" checked><span>Bokeh floaters</span></label>
+    <label style="margin-top:12px;"><span>Bokeh opacity</span><span id="yt-bokeh-opacity-val">55%</span></label>
+    <input type="range" id="yt-bokeh-opacity" min="0" max="100" step="1" value="55">
+    <label><span>Bokeh speed</span><span id="yt-bokeh-speed-val">1.0×</span></label>
+    <input type="range" id="yt-bokeh-speed" min="0" max="3" step="0.05" value="1">
+    <label><span>Bokeh amount</span><span id="yt-bokeh-count-val">40</span></label>
+    <input type="range" id="yt-bokeh-count" min="0" max="150" step="1" value="40">
+    <label><span>Bokeh randomness</span><span id="yt-bokeh-random-val">50%</span></label>
+    <input type="range" id="yt-bokeh-random" min="0" max="100" step="1" value="50">
+    <label><span>Bokeh direction</span><span></span></label>
+    <select id="yt-bokeh-direction">
+      <option value="random">Random drift</option>
+      <option value="bubble">Bubble up</option>
+      <option value="upside">Fall down</option>
+      <option value="diagonal">Bottom-left → top-right</option>
+      <option value="river">River flow (wavy, left → right)</option>
     </select>
     <div class="hint">Space: play/pause · ←/→: seek 10s<br>M: mute · F: fullscreen · Press C or tap ⚙ to hide</div>
   </div>
@@ -1600,8 +1625,10 @@
     if (scene === 'youtube') {
       if (ytPlayer && typeof ytPlayer.playVideo === 'function') ytPlayer.playVideo();
       else ensureYoutubeReady();
-    } else if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') {
-      ytPlayer.pauseVideo();
+      applyBokehVisibility();
+    } else {
+      if (ytPlayer && typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
+      stopBokeh();
     }
 
     // swap which section of the debug panel (C) is shown — the settings
@@ -1630,7 +1657,10 @@
   // controlled entirely via the settings panel and keyboard (no on-screen
   // player controls, matching the app's own minimal chrome) ----
   const YT_KEY = 'god-challenge-youtube';
-  let ytState = { url: 'https://www.youtube.com/watch?v=kxnaCvaAc_A', volume: 70, captions: false, gradient: 60, repeat: 'off' };
+  let ytState = {
+    url: 'https://www.youtube.com/watch?v=kxnaCvaAc_A', volume: 70, captions: false, gradient: 60, repeat: 'off',
+    bokehVisible: true, bokehOpacity: 55, bokehSpeed: 1, bokehCount: 40, bokehRandom: 50, bokehDirection: 'random',
+  };
   try {
     const savedYt = JSON.parse(localStorage.getItem(YT_KEY) || 'null');
     if (savedYt) ytState = Object.assign(ytState, savedYt);
@@ -1719,6 +1749,120 @@
   }
   window.addEventListener('resize', resizeYoutubeIframe);
 
+  // ---- floating bokeh particles over the video, themed to match the app ----
+  const bokehCanvas = document.getElementById('yt-bokeh-canvas');
+  const bokehCtx = bokehCanvas ? bokehCanvas.getContext('2d') : null;
+  const BOKEH_COLORS = ['196,181,253', '103,232,249', '255,255,255'];
+  let bokehParticles = [];
+  let bokehRunning = false;
+
+  function resizeBokehCanvas() {
+    if (!bokehCanvas) return;
+    bokehCanvas.width = window.innerWidth;
+    bokehCanvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resizeBokehCanvas);
+
+  function makeBokehParticle() {
+    const W = bokehCanvas.width, H = bokehCanvas.height;
+    const randomness = ytState.bokehRandom / 100;
+    return {
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: 6 + Math.random() * (18 + randomness * 30),
+      baseAlpha: 0.15 + Math.random() * 0.5,
+      phase: Math.random() * Math.PI * 2,
+      pulseSpeed: 0.3 + Math.random() * 0.8 * (0.4 + randomness),
+      color: BOKEH_COLORS[Math.floor(Math.random() * BOKEH_COLORS.length)],
+      vx: (Math.random() - 0.5) * randomness,
+      vy: (Math.random() - 0.5) * randomness,
+      wobble: Math.random() * Math.PI * 2,
+      wobbleSpeed: 0.5 + Math.random() * randomness * 2,
+    };
+  }
+
+  function rebuildBokehParticles() {
+    if (!bokehCanvas) return;
+    const count = Math.round(ytState.bokehCount);
+    bokehParticles = Array.from({ length: count }, makeBokehParticle);
+  }
+
+  // each direction mode moves particles differently, wrapping around the
+  // screen edges so the field reads as continuous and never "runs out"
+  function stepBokehParticle(p, dt, speed, W, H) {
+    const dir = ytState.bokehDirection;
+    p.wobble += dt * p.wobbleSpeed;
+    if (dir === 'bubble') {
+      p.y -= dt * 22 * speed;
+      p.x += Math.sin(p.wobble) * 0.3 * speed;
+      if (p.y < -p.r) { p.y = H + p.r; p.x = Math.random() * W; }
+    } else if (dir === 'upside') {
+      p.y += dt * 22 * speed;
+      p.x += Math.sin(p.wobble) * 0.3 * speed;
+      if (p.y > H + p.r) { p.y = -p.r; p.x = Math.random() * W; }
+    } else if (dir === 'diagonal') {
+      p.x += dt * 16 * speed;
+      p.y -= dt * 16 * speed;
+      if (p.x > W + p.r || p.y < -p.r) { p.x = -p.r + Math.random() * -W * 0.3; p.y = H + p.r - Math.random() * H * 0.3; }
+    } else if (dir === 'river') {
+      p.x += dt * 26 * speed;
+      p.y += Math.sin(p.wobble) * 0.6 * speed;
+      if (p.x > W + p.r) { p.x = -p.r; p.y = Math.random() * H; }
+    } else {
+      // random: gentle independent drift, wrapping on all four edges
+      p.x += p.vx * dt * 14 * speed;
+      p.y += p.vy * dt * 14 * speed;
+      if (p.x < -p.r) p.x = W + p.r; else if (p.x > W + p.r) p.x = -p.r;
+      if (p.y < -p.r) p.y = H + p.r; else if (p.y > H + p.r) p.y = -p.r;
+    }
+  }
+
+  let bokehLastT = 0;
+  function tickBokeh(time) {
+    if (!bokehRunning || !bokehCtx) return;
+    const dt = bokehLastT ? Math.min((time - bokehLastT) / 1000, 0.1) : 0;
+    bokehLastT = time;
+    const W = bokehCanvas.width, H = bokehCanvas.height;
+    bokehCtx.clearRect(0, 0, W, H);
+    const globalAlpha = ytState.bokehOpacity / 100;
+    const speed = ytState.bokehSpeed;
+    bokehParticles.forEach((p) => {
+      stepBokehParticle(p, dt, speed, W, H);
+      // "gloom": each particle fades in and out on its own cycle rather than
+      // sitting at a fixed brightness
+      const gloom = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(time * 0.001 * p.pulseSpeed + p.phase));
+      const alpha = p.baseAlpha * gloom * globalAlpha;
+      if (alpha <= 0.002) return;
+      const grad = bokehCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      grad.addColorStop(0, `rgba(${p.color}, ${alpha})`);
+      grad.addColorStop(1, `rgba(${p.color}, 0)`);
+      bokehCtx.fillStyle = grad;
+      bokehCtx.beginPath();
+      bokehCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      bokehCtx.fill();
+    });
+    requestAnimationFrame(tickBokeh);
+  }
+
+  function startBokeh() {
+    if (bokehRunning || !bokehCanvas) return;
+    resizeBokehCanvas();
+    rebuildBokehParticles();
+    bokehRunning = true;
+    bokehLastT = 0;
+    requestAnimationFrame(tickBokeh);
+  }
+
+  function stopBokeh() {
+    bokehRunning = false;
+    if (bokehCtx && bokehCanvas) bokehCtx.clearRect(0, 0, bokehCanvas.width, bokehCanvas.height);
+  }
+
+  function applyBokehVisibility() {
+    if (ytState.bokehVisible && currentScene === 'youtube') startBokeh();
+    else stopBokeh();
+  }
+
   function loadYoutubeUrl(url) {
     ytState.url = url;
     saveYtState();
@@ -1787,7 +1931,65 @@
     ytState.repeat = ytRepeatSelect.value;
     saveYtState();
   });
-  [ytUrlInput, ytLoadBtn, ytVolumeSlider, ytCaptionsBox, ytGradientBox, ytRepeatSelect].forEach((el) => {
+
+  const ytBokehVisibleBox = document.getElementById('yt-bokeh-visible');
+  const ytBokehOpacitySlider = document.getElementById('yt-bokeh-opacity');
+  const ytBokehOpacityVal = document.getElementById('yt-bokeh-opacity-val');
+  const ytBokehSpeedSlider = document.getElementById('yt-bokeh-speed');
+  const ytBokehSpeedVal = document.getElementById('yt-bokeh-speed-val');
+  const ytBokehCountSlider = document.getElementById('yt-bokeh-count');
+  const ytBokehCountVal = document.getElementById('yt-bokeh-count-val');
+  const ytBokehRandomSlider = document.getElementById('yt-bokeh-random');
+  const ytBokehRandomVal = document.getElementById('yt-bokeh-random-val');
+  const ytBokehDirectionSelect = document.getElementById('yt-bokeh-direction');
+
+  if (ytBokehVisibleBox) ytBokehVisibleBox.checked = ytState.bokehVisible;
+  if (ytBokehOpacitySlider) ytBokehOpacitySlider.value = ytState.bokehOpacity;
+  if (ytBokehOpacityVal) ytBokehOpacityVal.textContent = ytState.bokehOpacity + '%';
+  if (ytBokehSpeedSlider) ytBokehSpeedSlider.value = ytState.bokehSpeed;
+  if (ytBokehSpeedVal) ytBokehSpeedVal.textContent = ytState.bokehSpeed.toFixed(2) + '×';
+  if (ytBokehCountSlider) ytBokehCountSlider.value = ytState.bokehCount;
+  if (ytBokehCountVal) ytBokehCountVal.textContent = ytState.bokehCount;
+  if (ytBokehRandomSlider) ytBokehRandomSlider.value = ytState.bokehRandom;
+  if (ytBokehRandomVal) ytBokehRandomVal.textContent = ytState.bokehRandom + '%';
+  if (ytBokehDirectionSelect) ytBokehDirectionSelect.value = ytState.bokehDirection;
+
+  if (ytBokehVisibleBox) ytBokehVisibleBox.addEventListener('change', () => {
+    ytState.bokehVisible = ytBokehVisibleBox.checked;
+    saveYtState();
+    applyBokehVisibility();
+  });
+  if (ytBokehOpacitySlider) ytBokehOpacitySlider.addEventListener('input', () => {
+    ytState.bokehOpacity = parseInt(ytBokehOpacitySlider.value, 10);
+    if (ytBokehOpacityVal) ytBokehOpacityVal.textContent = ytState.bokehOpacity + '%';
+    saveYtState();
+  });
+  if (ytBokehSpeedSlider) ytBokehSpeedSlider.addEventListener('input', () => {
+    ytState.bokehSpeed = parseFloat(ytBokehSpeedSlider.value);
+    if (ytBokehSpeedVal) ytBokehSpeedVal.textContent = ytState.bokehSpeed.toFixed(2) + '×';
+    saveYtState();
+  });
+  if (ytBokehCountSlider) ytBokehCountSlider.addEventListener('input', () => {
+    ytState.bokehCount = parseInt(ytBokehCountSlider.value, 10);
+    if (ytBokehCountVal) ytBokehCountVal.textContent = ytState.bokehCount;
+    saveYtState();
+    rebuildBokehParticles();
+  });
+  if (ytBokehRandomSlider) ytBokehRandomSlider.addEventListener('input', () => {
+    ytState.bokehRandom = parseInt(ytBokehRandomSlider.value, 10);
+    if (ytBokehRandomVal) ytBokehRandomVal.textContent = ytState.bokehRandom + '%';
+    saveYtState();
+    rebuildBokehParticles();
+  });
+  if (ytBokehDirectionSelect) ytBokehDirectionSelect.addEventListener('change', () => {
+    ytState.bokehDirection = ytBokehDirectionSelect.value;
+    saveYtState();
+  });
+
+  [
+    ytUrlInput, ytLoadBtn, ytVolumeSlider, ytCaptionsBox, ytGradientBox, ytRepeatSelect,
+    ytBokehVisibleBox, ytBokehOpacitySlider, ytBokehSpeedSlider, ytBokehCountSlider, ytBokehRandomSlider, ytBokehDirectionSelect,
+  ].forEach((el) => {
     if (el) el.addEventListener('click', (e) => e.stopPropagation());
   });
 
