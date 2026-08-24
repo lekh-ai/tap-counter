@@ -786,16 +786,12 @@
       linear-gradient(to bottom, rgba(10, 8, 16, 0.75) 0%, rgba(10, 8, 16, 0) 22%),
       linear-gradient(to top, rgba(10, 8, 16, 0.8) 0%, rgba(10, 8, 16, 0) 30%),
       linear-gradient(120deg, rgba(124, 58, 237, 0.22), rgba(6, 182, 212, 0.16));
-    transition: opacity 0.3s ease;
-  }
-  #yt-gradient-overlay.hidden {
-    opacity: 0;
+    transition: opacity 0.15s ease;
+    /* strength is set inline as a 0–1 opacity from the panel's slider (0% = fully
+       transparent video, 100% = the gradient fully opaques the video behind it) */
   }
   #bg-youtube.yt-fullscreen {
     z-index: 40;
-  }
-  #bg-youtube.yt-fullscreen #yt-gradient-overlay {
-    opacity: 0.3;
   }
 
   /* floating cosmic / angelic symbols */
@@ -981,7 +977,8 @@
     <label style="margin-top:12px;"><span>Volume</span><span id="yt-volume-val">70%</span></label>
     <input type="range" id="yt-volume" min="0" max="100" step="1" value="70">
     <label class="checkbox-row"><input type="checkbox" id="yt-captions"><span>Captions</span></label>
-    <label class="checkbox-row"><input type="checkbox" id="yt-gradient" checked><span>Gradient overlay</span></label>
+    <label style="margin-top:12px;"><span>Gradient overlay</span><span id="yt-gradient-val">60%</span></label>
+    <input type="range" id="yt-gradient" min="0" max="100" step="1" value="60">
     <label><span>Repeat</span><span></span></label>
     <select id="yt-repeat">
       <option value="off">Off</option>
@@ -1631,10 +1628,12 @@
   // controlled entirely via the settings panel and keyboard (no on-screen
   // player controls, matching the app's own minimal chrome) ----
   const YT_KEY = 'god-challenge-youtube';
-  let ytState = { url: 'https://www.youtube.com/watch?v=kxnaCvaAc_A', volume: 70, captions: false, gradient: true, repeat: 'off' };
+  let ytState = { url: 'https://www.youtube.com/watch?v=kxnaCvaAc_A', volume: 70, captions: false, gradient: 60, repeat: 'off' };
   try {
     const savedYt = JSON.parse(localStorage.getItem(YT_KEY) || 'null');
     if (savedYt) ytState = Object.assign(ytState, savedYt);
+    // migrate the old on/off gradient checkbox to the new 0–100 strength slider
+    if (typeof ytState.gradient === 'boolean') ytState.gradient = ytState.gradient ? 60 : 0;
   } catch (e) {}
 
   function saveYtState() {
@@ -1734,16 +1733,22 @@
   const ytVolumeVal = document.getElementById('yt-volume-val');
   const ytCaptionsBox = document.getElementById('yt-captions');
   const ytGradientBox = document.getElementById('yt-gradient');
+  const ytGradientVal = document.getElementById('yt-gradient-val');
   const ytRepeatSelect = document.getElementById('yt-repeat');
   const ytGradientOverlay = document.getElementById('yt-gradient-overlay');
+
+  function applyGradientStrength() {
+    if (ytGradientOverlay) ytGradientOverlay.style.opacity = ytState.gradient / 100;
+  }
 
   if (ytUrlInput) ytUrlInput.value = ytState.url;
   if (ytVolumeSlider) ytVolumeSlider.value = ytState.volume;
   if (ytVolumeVal) ytVolumeVal.textContent = ytState.volume + '%';
   if (ytCaptionsBox) ytCaptionsBox.checked = ytState.captions;
-  if (ytGradientBox) ytGradientBox.checked = ytState.gradient;
+  if (ytGradientBox) ytGradientBox.value = ytState.gradient;
+  if (ytGradientVal) ytGradientVal.textContent = ytState.gradient + '%';
   if (ytRepeatSelect) ytRepeatSelect.value = ytState.repeat;
-  if (ytGradientOverlay) ytGradientOverlay.classList.toggle('hidden', !ytState.gradient);
+  applyGradientStrength();
 
   if (ytLoadBtn) ytLoadBtn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -1770,10 +1775,11 @@
       else ytPlayer.unloadModule('captions');
     }
   });
-  if (ytGradientBox) ytGradientBox.addEventListener('change', () => {
-    ytState.gradient = ytGradientBox.checked;
+  if (ytGradientBox) ytGradientBox.addEventListener('input', () => {
+    ytState.gradient = parseInt(ytGradientBox.value, 10);
+    if (ytGradientVal) ytGradientVal.textContent = ytState.gradient + '%';
     saveYtState();
-    if (ytGradientOverlay) ytGradientOverlay.classList.toggle('hidden', !ytState.gradient);
+    applyGradientStrength();
   });
   if (ytRepeatSelect) ytRepeatSelect.addEventListener('change', () => {
     ytState.repeat = ytRepeatSelect.value;
