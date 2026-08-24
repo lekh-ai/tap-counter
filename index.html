@@ -1778,14 +1778,16 @@
       vy: (Math.random() - 0.5) * randomness,
       wobble: Math.random() * Math.PI * 2,
       wobbleSpeed: 0.5 + Math.random() * randomness * 2,
-      // tumbles like a leaf caught in the wind — independent horizontal and
-      // vertical rotation axes combine into a 3D-looking tumble, and since the
-      // two run at different speeds they periodically both pass through 1
-      // (a full, unsquashed circle) rather than staying flattened
-      flipAngleX: Math.random() * Math.PI * 2,
-      flipAngleY: Math.random() * Math.PI * 2,
-      flipSpeedX: (0.25 + Math.random() * 1.1) * (0.5 + randomness),
-      flipSpeedY: (0.2 + Math.random() * 0.9) * (0.5 + randomness),
+      // tumbles like a leaf caught in the wind — one shared angle drives both
+      // the horizontal and vertical squash together (offset by a fixed phase
+      // per particle so it reads as a single 3D tumble, not two axes drifting
+      // independently), and it isn't always spinning: particles alternate
+      // between tumbling for a bit and resting flat as a full circle
+      flipAngle: Math.random() * Math.PI * 2,
+      flipSpeed: (0.3 + Math.random() * 1.1) * (0.5 + randomness),
+      flipAxisOffset: Math.random() * Math.PI,
+      tumbling: Math.random() < 0.5,
+      nextTumbleStateAt: 0,
     };
   }
 
@@ -1836,8 +1838,13 @@
     const speed = ytState.bokehSpeed;
     bokehParticles.forEach((p) => {
       stepBokehParticle(p, dt, speed, W, H);
-      p.flipAngleX += dt * p.flipSpeedX * speed;
-      p.flipAngleY += dt * p.flipSpeedY * speed;
+      if (time >= p.nextTumbleStateAt) {
+        p.tumbling = !p.tumbling;
+        const restSecs = 1.5 + Math.random() * 3.5;
+        const tumbleSecs = 1 + Math.random() * 2.5;
+        p.nextTumbleStateAt = time + (p.tumbling ? tumbleSecs : restSecs) * 1000;
+      }
+      if (p.tumbling) p.flipAngle += dt * p.flipSpeed * speed;
       // "gloom": each particle fades in and out on its own cycle rather than
       // sitting at a fixed brightness
       const gloom = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(time * 0.001 * p.pulseSpeed + p.phase));
@@ -1849,13 +1856,12 @@
       grad.addColorStop(1, `rgba(${p.color}, 0)`);
       bokehCtx.save();
       bokehCtx.translate(p.x, p.y);
-      // tumbles like a leaf on the wind: two independent rotation axes squash
-      // it horizontally and vertically at different rates, reading as a real
-      // 3D tumble — since the axes drift out of sync, it also periodically
-      // passes through a full, unsquashed circle rather than staying flattened
+      // tumbles like a leaf on the wind: one shared angle drives both axes
+      // together (offset by a fixed per-particle phase for a 3D look), and
+      // only while `tumbling` is true — otherwise it rests as a full circle
       bokehCtx.scale(
-        Math.max(0.12, Math.abs(Math.cos(p.flipAngleX))),
-        Math.max(0.12, Math.abs(Math.cos(p.flipAngleY)))
+        Math.max(0.12, Math.abs(Math.cos(p.flipAngle))),
+        Math.max(0.12, Math.abs(Math.cos(p.flipAngle + p.flipAxisOffset)))
       );
       bokehCtx.translate(-p.x, -p.y);
       // a real glow: the shadow blooms outward from the solid circle rather
