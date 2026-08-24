@@ -1778,6 +1778,10 @@
       vy: (Math.random() - 0.5) * randomness,
       wobble: Math.random() * Math.PI * 2,
       wobbleSpeed: 0.5 + Math.random() * randomness * 2,
+      // each particle randomly flips between a solid disc and a hollow ring —
+      // real bokeh circles vary this way depending on the lens aperture
+      ring: Math.random() < 0.5,
+      nextFlipAt: 0,
     };
   }
 
@@ -1828,17 +1832,30 @@
     const speed = ytState.bokehSpeed;
     bokehParticles.forEach((p) => {
       stepBokehParticle(p, dt, speed, W, H);
+      // randomly flips between a solid disc and a hollow ring every so often,
+      // like real bokeh circles changing shape with the lens aperture
+      if (time >= p.nextFlipAt) {
+        p.ring = Math.random() < 0.5;
+        p.nextFlipAt = time + (1500 + Math.random() * 4000) / Math.max(speed, 0.1);
+      }
       // "gloom": each particle fades in and out on its own cycle rather than
       // sitting at a fixed brightness
       const gloom = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(time * 0.001 * p.pulseSpeed + p.phase));
       const alpha = p.baseAlpha * gloom * globalAlpha;
       if (alpha <= 0.002) return;
-      const grad = bokehCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r);
+      // a solid, evenly-lit disc/ring with just a thin blurred rim — reads as a
+      // rounded bokeh shape rather than a long radial fade to transparent
+      const grad = bokehCtx.createRadialGradient(p.x, p.y, p.r * 0.72, p.x, p.y, p.r);
       grad.addColorStop(0, `rgba(${p.color}, ${alpha})`);
       grad.addColorStop(1, `rgba(${p.color}, 0)`);
       bokehCtx.fillStyle = grad;
       bokehCtx.beginPath();
-      bokehCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      if (p.ring) {
+        bokehCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        bokehCtx.arc(p.x, p.y, p.r * 0.55, 0, Math.PI * 2, true);
+      } else {
+        bokehCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      }
       bokehCtx.fill();
     });
     requestAnimationFrame(tickBokeh);
