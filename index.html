@@ -2003,6 +2003,18 @@
     return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT');
   }
 
+  // holding ← or ↓ and releasing it steps the tap count down by one — the
+  // undo counterpart to tapping/clicking to increment. Left/Down (rather
+  // than Right/Up) so it reads as "back up", and it's suppressed on the
+  // Video scene since those same arrow keys already seek the player there.
+  document.addEventListener('keyup', (e) => {
+    if (currentScene === 'youtube' || isTypingInField()) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      decrement();
+    }
+  });
+
   document.addEventListener('keydown', (e) => {
     if (currentScene !== 'youtube' || !ytPlayer || isTypingInField()) return;
     if (e.key === ' ' || e.code === 'Space') {
@@ -2096,6 +2108,13 @@
       playAlertSound();
       showToast(MILESTONES[count]);
     }
+  }
+
+  function decrement() {
+    if (count <= 0) return;
+    count--;
+    updateDisplay();
+    playTapSound();
   }
 
   function reset() {
