@@ -1012,7 +1012,7 @@
       <option value="diagonal">Bottom-left → top-right</option>
       <option value="river">River flow (wavy, left → right)</option>
     </select>
-    <div class="hint">Space: play/pause · ←/→: seek 10s<br>M: mute · F: fullscreen · Press C or tap ⚙ to hide</div>
+    <div class="hint">Space: play/pause · J/L: seek 10s<br>M: mute · F: fullscreen · Press C or tap ⚙ to hide</div>
   </div>
 </div>
 <div id="symbols"></div>
@@ -2007,8 +2007,10 @@
   // undo counterpart to tapping/clicking to increment. Left/Down (rather
   // than Right/Up) so it reads as "back up", and it's suppressed on the
   // Video scene since those same arrow keys already seek the player there.
+  // arrows always decrement, on every scene — they no longer double as the
+  // Video scene's seek keys (see J/L below) so there's nothing to conflict with
   document.addEventListener('keyup', (e) => {
-    if (currentScene === 'youtube' || isTypingInField()) return;
+    if (isTypingInField()) return;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
       e.preventDefault();
       decrement();
@@ -2022,9 +2024,9 @@
       const state = ytPlayer.getPlayerState && ytPlayer.getPlayerState();
       if (state === YT.PlayerState.PLAYING) ytPlayer.pauseVideo();
       else ytPlayer.playVideo();
-    } else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+    } else if (e.key === 'j' || e.key === 'J' || e.key === 'l' || e.key === 'L') {
       e.preventDefault();
-      const delta = e.key === 'ArrowRight' ? 10 : -10;
+      const delta = (e.key === 'l' || e.key === 'L') ? 10 : -10;
       if (ytPlayer.getCurrentTime && ytPlayer.seekTo) {
         ytPlayer.seekTo(Math.max(0, ytPlayer.getCurrentTime() + delta), true);
       }
