@@ -18,7 +18,7 @@
 
   #app {
     position: relative;
-    width: 100vw; height: 100vh;
+    width: 100vw; height: calc(100vh - var(--header-h));
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -153,6 +153,106 @@
   #phase.show {
     opacity: 1;
     transform: translateY(0);
+  }
+
+  :root { --header-h: 320px; }
+
+  /* header flows normally at the top of the page (title + goal card), rather
+     than pinning to the viewport — #app's height is trimmed by --header-h
+     (kept live via ResizeObserver) so the two together still fill one screen
+     on desktop, with no overlap and no double scrollbar */
+  #page-header {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 92px 24px 8px;
+  }
+
+  /* the 5000-tap goal card — the main tracked element, sits between the title
+     and the counter/verse panels */
+  #goal-card {
+    position: relative;
+    z-index: 1;
+    margin-top: 22px;
+    width: min(680px, 94vw);
+    padding: 22px 28px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    background: rgba(15, 12, 24, 0.03);
+    backdrop-filter: none;
+    border: 1px solid rgba(255,255,255,0.03);
+    border-radius: 20px;
+    box-shadow: none;
+  }
+
+  #goal-card-label {
+    margin: 0;
+    text-align: center;
+    font-size: clamp(10px, 1.3vmin, 12px);
+    font-weight: 400;
+    font-style: italic;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+    color: rgba(255,255,255,0.4);
+  }
+
+  #goal-progress-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  #goal-progress-label {
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: rgba(196, 181, 253, 0.9);
+    font-variant-numeric: tabular-nums;
+  }
+
+  #goal-progress-track {
+    flex: 1;
+    height: 10px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+
+  #goal-progress-fill {
+    height: 100%;
+    width: 0%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #7c3aed, #06b6d4);
+    transition: width 0.3s ease;
+  }
+
+  #goal-progress-checks {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 3px;
+    max-width: 100%;
+  }
+
+  .goal-check {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.14);
+  }
+
+  .goal-check.checked {
+    background: linear-gradient(135deg, #7c3aed, #06b6d4);
+    border-color: transparent;
+    box-shadow: 0 0 6px rgba(196, 181, 253, 0.85);
   }
 
   #scene-toggle {
@@ -522,10 +622,7 @@
   }
 
   #titles {
-    position: absolute;
-    top: 48px;
-    left: 50%;
-    transform: translateX(-50%);
+    position: relative;
     z-index: 1;
     text-align: center;
     width: 90vw;
@@ -843,20 +940,31 @@
        instead of forcing everything into one centered, unscrollable screen.
        (Placed at the end of the stylesheet so these overrides actually win the
        cascade against the later plain-selector base rules above.) */
+    /* #page-header now flows above #app instead of overlaying it, so the page
+       itself scrolls on mobile rather than #app internally */
+    html, body {
+      overflow-y: auto;
+    }
     #app, #app.has-verse {
       justify-content: flex-start;
       height: auto;
-      min-height: 100vh;
-      overflow-y: auto;
-      padding-top: 168px;
+      min-height: auto;
+      padding-top: 32px;
       padding-bottom: 120px;
       gap: 24px;
     }
 
-    /* the top toggle/volume pills are fixed at top:24px and were overlapping
-       the title, which sat right above the ring at the same height */
-    #scene-toggle, #volume {
-      top: 14px;
+    /* #page-header now flows normally above #app on all sizes, so it just
+       needs less top clearance (the fixed corner pills are smaller here) */
+    #page-header {
+      padding: 64px 16px 4px;
+    }
+    #goal-card {
+      width: 94vw;
+      padding: 18px 18px 20px;
+      margin-top: 16px;
+    }
+    #scene-toggle {
       padding: 3px;
     }
     #scene-toggle button {
@@ -871,7 +979,6 @@
       width: 60px;
     }
     #titles {
-      top: 76px;
       width: 94vw;
     }
     #title {
@@ -1016,11 +1123,23 @@
   </div>
 </div>
 <div id="symbols"></div>
-<div id="app">
+<div id="page-header">
   <div id="titles">
     <div id="title">The God Challenge</div>
     <div id="subtitle">Imagining, Musing, Muttering &rarr; Manifesting to Natural from Spiritual</div>
   </div>
+  <div id="goal-card">
+    <div id="goal-progress-row">
+      <div id="goal-progress-track">
+        <div id="goal-progress-fill"></div>
+      </div>
+      <div id="goal-progress-label">0 / 5000</div>
+    </div>
+    <div id="goal-progress-checks"></div>
+    <h6 id="goal-card-label">Charge : 5000 per night, he would have already came, like he came for others, but iI have to Pay for each night!</h6>
+  </div>
+</div>
+<div id="app">
   <div id="ring-wrap">
     <svg id="ring" viewBox="0 0 420 420">
       <defs>
@@ -1081,10 +1200,22 @@
 
 <script>
   const STORAGE_KEY = 'god-challenge-count';
+  const TOTAL_STORAGE_KEY = 'god-challenge-total-count';
+  const LOADER_MAX = 100; // the ring/phase loader always fills over the first 100 taps, as before
+  const BIG_GOAL = 5000; // the separate top goal bar tracks progress toward this — never reset locally
   let count = 0;
   try {
     const saved = parseInt(localStorage.getItem(STORAGE_KEY), 10);
-    if (Number.isFinite(saved) && saved >= 0) count = Math.min(saved, 100);
+    if (Number.isFinite(saved) && saved >= 0) count = saved;
+  } catch (e) {}
+
+  // totalCount is the cross-session/cross-device lifetime tally that feeds the
+  // 5000 goal bar and the DB sync — Reset only clears the local loader (count),
+  // it never touches this
+  let totalCount = 0;
+  try {
+    const savedTotal = parseInt(localStorage.getItem(TOTAL_STORAGE_KEY), 10);
+    if (Number.isFinite(savedTotal) && savedTotal >= 0) totalCount = Math.min(savedTotal, BIG_GOAL);
   } catch (e) {}
 
   const countEl = document.getElementById('count');
@@ -1099,7 +1230,7 @@
     { max: 25, label: 'Imagining' },
     { max: 50, label: 'Musing' },
     { max: 75, label: 'Muttering' },
-    { max: 100, label: 'Manifesting' },
+    { max: LOADER_MAX, label: 'Manifesting' },
   ];
   function phaseForCount(c) {
     return PHASES.find((p) => c <= p.max) || PHASES[PHASES.length - 1];
@@ -1150,16 +1281,96 @@
     try { localStorage.setItem(VOLUME_KEY, volumeSlider.value); } catch (e) {}
   });
 
+  // ---- Cross-device cloud sync (JSONBin.io) ----
+  // Sign up free at https://jsonbin.io, create a bin containing {"count":0,"updatedAt":0},
+  // then create an access key under API Keys and paste both values in below.
+  const JSONBIN_BIN_ID = '6aa92b11ffd5d16053097203';
+  const JSONBIN_API_KEY = '$2a$10$G6l5Ih1bXgIowL1pJfTQNuF8f1h7CO9PI51dL4.roaJdPq3Zyy4SG';
+  const JSONBIN_CONFIGURED = JSONBIN_BIN_ID !== 'YOUR_BIN_ID_HERE' && JSONBIN_API_KEY !== 'YOUR_X_MASTER_KEY_HERE';
+  const JSONBIN_BASE = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+
+  // silent — never surfaces errors or UI feedback, just best-effort sync.
+  // Syncs totalCount (the lifetime tally), not the locally-resettable count.
+  async function cloudPush() {
+    if (!JSONBIN_CONFIGURED) return;
+    try {
+      await fetch(JSONBIN_BASE, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Master-Key': JSONBIN_API_KEY,
+          'X-Bin-Versioning': 'false',
+        },
+        body: JSON.stringify({ count: totalCount, updatedAt: Date.now() }),
+      });
+    } catch (e) {}
+  }
+
+  async function cloudPull() {
+    if (!JSONBIN_CONFIGURED) return;
+    try {
+      const res = await fetch(`${JSONBIN_BASE}/latest`, {
+        headers: { 'X-Master-Key': JSONBIN_API_KEY },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const remoteTotal = data && data.record && data.record.count;
+      if (Number.isFinite(remoteTotal) && remoteTotal > totalCount) {
+        totalCount = Math.min(remoteTotal, BIG_GOAL);
+        try { localStorage.setItem(TOTAL_STORAGE_KEY, String(totalCount)); } catch (e) {}
+        updateGoalBar();
+      }
+    } catch (e) {}
+  }
+
+  // ---- separate 5000-tap goal bar with a checker lighting up every 100 taps.
+  // Tracks totalCount, the lifetime tally across sessions/devices — the Reset
+  // button never touches it, only the local ring loader (count). ----
+  const GOAL_CHECK_STEP = 100;
+  const goalProgressLabel = document.getElementById('goal-progress-label');
+  const goalProgressFill = document.getElementById('goal-progress-fill');
+  const goalProgressChecks = document.getElementById('goal-progress-checks');
+  const goalCheckEls = [];
+  for (let i = 0; i < BIG_GOAL / GOAL_CHECK_STEP; i++) {
+    const el = document.createElement('div');
+    el.className = 'goal-check';
+    el.title = `${(i + 1) * GOAL_CHECK_STEP} taps`;
+    goalProgressChecks.appendChild(el);
+    goalCheckEls.push(el);
+  }
+
+  function updateGoalBar() {
+    const pct = Math.min(totalCount / BIG_GOAL, 1);
+    goalProgressFill.style.width = `${pct * 100}%`;
+    goalProgressLabel.textContent = `${totalCount} / ${BIG_GOAL}`;
+    const checked = Math.floor(totalCount / GOAL_CHECK_STEP);
+    goalCheckEls.forEach((el, i) => el.classList.toggle('checked', i < checked));
+  }
+
+  // keep --header-h in sync with the real (wrapping) height of the title +
+  // goal card, so #app's height trims to fill exactly what's left on screen
+  const pageHeaderEl = document.getElementById('page-header');
+  function syncHeaderHeight() {
+    document.documentElement.style.setProperty('--header-h', `${pageHeaderEl.offsetHeight}px`);
+  }
+  if (window.ResizeObserver) {
+    new ResizeObserver(syncHeaderHeight).observe(pageHeaderEl);
+  } else {
+    window.addEventListener('resize', syncHeaderHeight);
+  }
+  syncHeaderHeight();
+
   function updateDisplay() {
     countEl.textContent = count;
     countEl.classList.remove('pulse');
     void countEl.offsetWidth;
     countEl.classList.add('pulse');
 
-    const pct = Math.min(count / 100, 1);
+    const pct = Math.min(count / LOADER_MAX, 1);
     progressEl.style.strokeDashoffset = CIRC * (1 - pct);
     setRootProgress(pct);
     updatePhase();
+    updateGoalBar();
 
     try { localStorage.setItem(STORAGE_KEY, String(count)); } catch (e) {}
   }
@@ -2102,8 +2313,17 @@
     } catch (e) {}
   }
 
+  function bumpTotal(delta) {
+    totalCount = Math.max(0, Math.min(totalCount + delta, BIG_GOAL));
+    try { localStorage.setItem(TOTAL_STORAGE_KEY, String(totalCount)); } catch (e) {}
+    // auto-silently sync to the cloud every 10 lifetime taps — this total is
+    // never cleared by Reset, so it keeps tracking progress across sessions/devices
+    if (totalCount > 0 && totalCount % 10 === 0) cloudPush();
+  }
+
   function increment() {
     count++;
+    bumpTotal(1);
     updateDisplay();
     playTapSound();
     if (MILESTONES[count]) {
@@ -2115,6 +2335,7 @@
   function decrement() {
     if (count <= 0) return;
     count--;
+    bumpTotal(-1);
     updateDisplay();
     playTapSound();
   }
@@ -2127,9 +2348,11 @@
 
   // sync UI with any restored count, without the tap pulse/sound
   countEl.textContent = count;
-  progressEl.style.strokeDashoffset = CIRC * (1 - Math.min(count / 100, 1));
-  setRootProgress(Math.min(count / 100, 1));
+  progressEl.style.strokeDashoffset = CIRC * (1 - Math.min(count / LOADER_MAX, 1));
+  setRootProgress(Math.min(count / LOADER_MAX, 1));
   updatePhase();
+  updateGoalBar();
+  cloudPull();
 
   applySceneChrome(currentScene);
   document.querySelectorAll('#scene-toggle button').forEach((btn) => {
